@@ -595,3 +595,20 @@ button.source-pill:focus-visible{outline:3px solid var(--green);outline-offset:4
 @keyframes sources-enter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @media(max-width:620px){.source-pill{display:flex;font-size:.65rem;padding:6px 8px}.topbar{gap:10px}.sources-dialog{padding:18px}}
 @media(prefers-reduced-motion:reduce){.receipt-content,.sources-dialog[open]{animation:none}}
+
+/* Nitidez do recibo e conciliação financeira */
+.hero-receipt{transform:none;filter:none;backdrop-filter:none}
+.receipt-content{animation:receipt-fade-in 1.6s cubic-bezier(.2,.65,.3,1) both}
+@keyframes receipt-fade-in{from{opacity:.3}to{opacity:1}}
+.receipt-expense>span{font-size:.72rem;color:var(--ink)}
+.receipt-expense small{font-size:.68rem;color:#44534b}
+.receipt-expense strong{font-size:.85rem}
+.receipt-person strong{font-size:1.05rem}.receipt-total{font-size:.8rem;gap:12px}.receipt-total strong{font-size:1rem;white-space:nowrap}
+.cost-breakdown{margin-top:24px;padding:22px;border:2px solid var(--ink);border-radius:var(--radius);background:var(--white);box-shadow:var(--shadow)}
+.cost-rows{display:grid;gap:0}.cost-rows>div{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:12px 0;border-bottom:1px solid #ddd6c9;font-size:.85rem}.cost-rows span{display:flex;align-items:center;gap:8px}.cost-rows strong{white-space:nowrap}.cost-rows a{color:var(--green)}
+.cost-breakdown p,.cost-breakdown details{font-size:.76rem;color:var(--muted);line-height:1.6}.cost-breakdown details>a{display:inline-flex;gap:5px;margin:6px 12px 6px 0;color:var(--green)}
+.cost-reconciliation{display:flex;flex-wrap:wrap;gap:10px 24px;padding:14px;background:var(--paper);border-radius:9px;margin-top:15px;font-size:.75rem}
+.credit-value{color:#934b23}.table-wrap td:last-child small{display:block;font-size:.65rem}.product-reference{display:block;min-height:35px;margin-top:6px;color:var(--muted);font-size:.65rem}.product-reference a{color:var(--green);display:inline-flex;gap:3px}
+.product-card:nth-child(4) .product-photo img,.product-card:nth-child(8) .product-photo img,.product-card:nth-child(9) .product-photo img{object-fit:contain;background:var(--paper)}
+@media(max-width:620px){.cost-breakdown{padding:15px}.cost-rows>div{font-size:.75rem}.cost-rows strong{white-space:normal;text-align:right}}
+@media(prefers-reduced-motion:reduce){.receipt-content{animation:none}}

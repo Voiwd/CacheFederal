@@ -228,6 +228,16 @@ export async function getPolitician(id, options = {}) {
 
 export async function getExpenses(politicianId, filters = {}, options = {}) {
   const { year = new Date().getFullYear(), month, category } = filters
+  if (!String(politicianId).startsWith('demo-')) {
+    const response = await fetch(`/api/ceap-${year}-${politicianId}.json`, {signal: options.signal})
+    if (!response.ok) throw new Error('Não há um arquivo CEAP disponível para este deputado e período.')
+    const snapshot = await response.json()
+    const data = snapshot.rows.map((row, index) => ({id:`${year}-${politicianId}-${index}`, year:Number(year),sourceMode:'official', ...Object.fromEntries(snapshot.columns.map((key,i)=>[key,row[i]]))}))
+      .filter(row=>(!month||row.month===Number(month))&&(!category||row.category===category))
+    const metadata = {sourceMode:'official',sourceUrl:snapshot.sourceUrl,fetchedAt:snapshot.fetchedAt,complete:true,notice:'CEAP: arquivo CSV oficial da Câmara. Estornos mantêm o sinal original.'}
+    for(let end=50;end<data.length;end+=50) options.onProgress?.(summarizeExpenses(data.slice(0,end),{...metadata,complete:false}))
+    return summarizeExpenses(data,metadata)
+  }
   if (String(politicianId).startsWith('demo-')) {
     const data = demoExpenses.filter(
       (expense) =>
@@ -280,14 +290,16 @@ export async function getExpenses(politicianId, filters = {}, options = {}) {
 }
 
 export function summarizeExpenses(expenses, metadata = {}) {
-  const total = expenses.reduce((sum, expense) => sum + expense.netValue, 0)
+  const total = expenses.reduce((sum, expense) => sum + Math.round(expense.netValue * 100), 0) / 100
+  const debits = expenses.filter(e=>e.netValue>0).reduce((sum,e)=>sum+Math.round(e.netValue*100),0)/100
+  const credits = expenses.filter(e=>e.netValue<0).reduce((sum,e)=>sum+Math.round(e.netValue*100),0)/100
   const byCategory = Object.entries(
     expenses.reduce((acc, expense) => {
       acc[expense.category] = (acc[expense.category] || 0) + expense.netValue
       return acc
     }, {}),
   )
-    .map(([name, value]) => ({ name, value }))
+    .map(([name, value]) => ({ name, value: Math.round(value*100)/100 }))
     .sort((a, b) => b.value - a.value)
 
   const bySupplier = Object.entries(
@@ -296,10 +308,27 @@ export function summarizeExpenses(expenses, metadata = {}) {
       return acc
     }, {}),
   )
-    .map(([name, value]) => ({ name, value }))
+    .map(([name, value]) => ({ name, value: Math.round(value*100)/100 }))
     .sort((a, b) => b.value - a.value)
 
-  return { data: expenses, total, byCategory, bySupplier, complete: true, ...metadata }
+  return { data: expenses, total, debits, credits, byCategory, bySupplier, complete: true, ...metadata }
+}
+
+const auditCache = new Map()
+export async function getMandateCosts(id,year,options={}) {
+  if(String(id).startsWith('demo-'))return null
+  const key=`${id}-${year}`,cached=auditCache.get(key)
+  if(cached&&Date.now()-cached.time<3600000)return cached.data
+  const response=await fetch(`/api/audit/${id}?year=${year}`,{signal:options.signal})
+  if(!response.ok)throw new Error('Folhas e gabinete indisponíveis. O subtotal inclui apenas a CEAP.')
+  const data=await response.json()
+  if(data.error)throw new Error(data.error)
+  auditCache.set(key,{data,time:Date.now()});return data
+}
+
+export function auditedTotal(expenses,audit) {
+  const values=[expenses?.total,audit?.salary,audit?.allowances,audit?.indemnities,audit?.dailyAllowances,audit?.office]
+  return values.reduce((sum,value)=>sum+(Number.isFinite(value)?Math.round(value*100):0),0)/100
 }
 
 export function buildComparisons(value) {
