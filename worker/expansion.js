@@ -1,8 +1,8 @@
+import {NAMED_DIRECTORY} from './political-profiles.js'
 // Official sources only. Missing personal data is never represented as zero.
 const expansionCache = new Map()
 const SENATORS = 'https://legis.senado.leg.br/dadosabertos/senador/lista/atual.json'
 const CEAPS = 'https://adm.senado.gov.br/adm-dadosabertos/api/v1/senadores/despesas_ceaps/'
-const IBGE = 'https://servicodados.ibge.gov.br/api/v1/localidades/'
 const PORTAL = 'https://portaldatransparencia.gov.br/'
 const PNCP = 'https://pncp.gov.br/api/consulta/v1/contratos'
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
@@ -32,26 +32,16 @@ export async function searchExpansion(params) {
   const role = normalizeRole(params.get('role'))
   const name = fold(params.get('name') || params.get('query'))
   const state = String(params.get('state') || '').toUpperCase()
-  const city = fold(params.get('city') || name)
+  if (['governor','mayor','president','minister'].includes(role)) {
+    const party=fold(params.get('party'))
+    const cityFilter=fold(params.get('city'))
+    const matches=NAMED_DIRECTORY.profiles.filter(p=>p.role===role&&(!state||p.state===state)&&(!party||fold(p.party)===party)&&(!name||[p.name,p.fullName,p.institutionalName].some(v=>fold(v).includes(name)))&&(!cityFilter||fold(p.city).includes(cityFilter)))
+    return {data:matches.slice(0,100),total:matches.length,generatedAt:NAMED_DIRECTORY.generatedAt,notice:role==='minister'?'Nomes do diretório oficial do Planalto, com data de consulta no perfil. Histórico de titulares e remuneração não integrado.':'Nomes eleitos nas eleições ordinárias: governadores/presidente 2022 e prefeitos 2024. Registros eleitorais históricos não confirmam ocupação atual. Até 100 resultados; refine nome, partido ou UF.'}
+  }
   if (role === 'senator') {
     const result = await expansionJson(SENATORS)
     const data = result.ListaParlamentarEmExercicio.Parlamentares.Parlamentar.map(normalizeSenator).filter(p=>(!name||fold(p.name).includes(name))&&(!state||p.state===state))
     return {data,notice:'Senadores em exercício na consulta atual. A lista não reconstitui a composição de anos anteriores.'}
-  }
-  if (role === 'governor' || role === 'mayor') {
-    const url = role === 'governor' ? `${IBGE}estados?orderBy=nome` : `${IBGE}municipios?orderBy=nome`
-    const places = await expansionJson(url)
-    const data = places.filter(p=>{
-      const uf = role==='governor'?p.sigla:(p.microrregiao?.mesorregiao?.UF || p['regiao-imediata']?.['regiao-intermediaria']?.UF)?.sigla
-      return (!state||uf===state)&&(!(role==='mayor'?city:name)||fold(p.nome).includes(role==='mayor'?city:name))
-    }).slice(0,100).map(p=>({id:`${role}-${p.id}`,ibgeId:String(p.id),name:`${role==='governor'?'Governo de':'Prefeitura de'} ${p.nome}`,city:role==='mayor'?p.nome:null,state:role==='governor'?p.sigla:(p.microrregiao?.mesorregiao?.UF||p['regiao-imediata']?.['regiao-intermediaria']?.UF)?.sigla,role,scope:'administration',sourceMode:'official',officialUrl:'https://www.gov.br/pncp/'}))
-    return {data,notice:'Busca por território do IBGE, não por nome do titular. Contratos pertencem à administração e não representam remuneração ou gasto pessoal. Até 100 resultados; refine município/UF.'}
-  }
-  if (role === 'president' || role === 'minister') {
-    const sourceUrl='https://api.siorg.gov.br/doc/orgao-entidade'
-    const result=await expansionJson(sourceUrl)
-    const data=(result.unidades||[]).filter(p=>p.codigoEsfera?.endsWith('/1')&&p.codigoPoder?.endsWith('/1')&&(role==='president'?fold(p.nome)==='presidencia da republica':fold(p.nome).startsWith('ministerio '))&&(!name||fold(p.nome).includes(name))).map(p=>({id:`siorg-${p.codigoUnidade.split('/').pop()}`,externalId:p.codigoUnidade.split('/').pop(),role,scope:'administration',name:p.nome,agencyAcronym:p.sigla,state:'BR',sourceMode:'official',officialUrl:`https://api.siorg.gov.br/doc/unidade-organizacional/${p.codigoUnidade.split('/').pop()}/completa`}))
-    return {data,notice:'Órgãos atuais do SIORG. Busque pelo nome do ministério; titulares e remuneração individual ainda não integrados. Dados de gestão não são gastos pessoais.'}
   }
   throw new Error('Cargo não reconhecido.')
 }
@@ -59,6 +49,9 @@ const missing = (kind,label,sourceUrl,notice) => ({kind,label,value:null,status:
 export async function expansionCosts(profile,year) {
   const role = normalizeRole(profile.role)
   const components = [missing('remuneration','Remuneração',PORTAL,'Folha individual ainda não integrada. Não disponível não significa zero.'),missing('office','Estrutura e exercício do cargo',profile.officialUrl || PORTAL,'Cobertura de gabinete, benefícios e viagens ainda não integrada.')]
+  if (profile.termStart && (year < Number(profile.termStart.slice(0,4)) || year > Number(profile.termEnd.slice(0,4)))) {
+    return {components,year,sourceUrl:profile.officialUrl,notice:`Ano fora do mandato nominal da eleição consultada (${profile.termStart.slice(0,4)}–${profile.termEnd.slice(0,4)}). Não foram atribuídas despesas de outra gestão.`}
+  }
   if (role === 'senator') {
     components[0].sourceUrl='https://www25.senado.leg.br/web/transparencia/sen'
     const id = String(profile.externalId || profile.id?.replace('senate-',''))
@@ -73,7 +66,7 @@ export async function expansionCosts(profile,year) {
     } catch(e) { components[1] = missing('office','Reembolsos CEAPS',sourceUrl,e.message) }
   } else if (role === 'governor' || role === 'mayor') {
     const uf = String(profile.state || '').toUpperCase()
-    if (!/^[A-Z]{2}$/.test(uf) || (role==='mayor'&&!/^\d{7}$/.test(profile.ibgeId))) throw new Error('Território inválido.')
+    if (!/^[A-Z]{2}$/.test(uf) || (role==='mayor'&&!/^\d{7}$/.test(profile.ibgeId))) return {components,year,sourceUrl:profile.officialUrl,notice:'Perfil eleitoral disponível; correspondência territorial IBGE não confirmada. Despesas de gestão não consultadas para evitar atribuição incorreta.'}
     const query = new URLSearchParams({dataInicial:`${year}0101`,dataFinal:`${year}1231`,pagina:'1',tamanhoPagina:'50',poderId:'E',uf,esferaId:role==='mayor'?'M':'E'})
     if (role==='mayor') query.set('codigoMunicipioIbge',profile.ibgeId)
     const sourceUrl = `${PNCP}?${query}`
@@ -87,11 +80,11 @@ export async function expansionCosts(profile,year) {
     components.push(missing('administration','Despesas da gestão',PORTAL,'Consulta de despesas institucionais disponível na fonte oficial. Integração individual de presidente e ministros pendente; não há valores consolidados nesta tela.'))
     if(role==='president') components[1]=missing('office','Cartão de pagamento da Presidência','https://www.gov.br/casacivil/pt-br/acesso-a-informacao/informacoes-classificadas/despesas-com-cartao-de-pagamento','Arquivos oficiais disponíveis na Casa Civil. Importação e atribuição dos lançamentos ainda não integradas.')
     const id=String(profile.externalId||profile.id?.replace('siorg-',''))
-    if(!/^\d+$/.test(id)) throw new Error('Identificador SIORG inválido.')
+    if(!/^\d+$/.test(id)) return {components,year,sourceUrl:profile.officialUrl,notice:'Titular identificado na fonte oficial; órgão SIORG sem correspondência confirmada. Custos indisponíveis.'}
     const structureUrl=`https://api.siorg.gov.br/doc/unidade-organizacional/${id}/completa`
     const structure=await expansionJson(structureUrl)
     const unit=structure.unidade
-    if(!unit || (role==='president'?fold(unit.nome)!=='presidencia da republica':!fold(unit.nome).startsWith('ministerio '))) throw new Error('Órgão incompatível com o cargo selecionado.')
+    if(!unit || (profile.institutionalName ? fold(unit.nome)!==fold(profile.institutionalName) : (role==='president'?fold(unit.nome)!=='presidencia da republica':!fold(unit.nome).startsWith('ministerio ')))) throw new Error('Órgão incompatível com o cargo selecionado.')
     components[1].notice += ` Órgão: ${unit.nome}. ${unit.autoridade?.denominacao?.descricao||''}. Competências e estrutura disponíveis no registro SIORG.`
     if(role!=='president') components[1].sourceUrl=structureUrl
     const query=new URLSearchParams({dataInicial:`${year}0101`,dataFinal:`${year}1231`,pagina:'1',tamanhoPagina:'50',poderId:'E',esferaId:'F'})
@@ -102,27 +95,24 @@ export async function expansionCosts(profile,year) {
       components[2]={kind:'administration',label:'Contratos publicados no PNCP',value:null,status:rows.length?'partial':'unavailable',rows,sourceUrl,notice:'Amostra da primeira página federal (até 50 registros), filtrada pelo nome exato do órgão no SIORG. Ausência na amostra não significa ausência de contratos. Valores contratados não são pagamentos nem gastos pessoais. Sem total consolidado.'}
     } catch(e) {components[2]=missing('administration','Contratos publicados no PNCP',sourceUrl,e.message)}
   }
-  return {components,sourceUrl:components.find(c=>c.rows?.length)?.sourceUrl || profile.officialUrl || PORTAL,notice:'Valores pessoais, exercício do cargo e gestão permanecem separados. Dados ausentes não entram em totais.',year,fetchedAt:new Date().toISOString()}
+  return {components,sourceUrl:components.find(c=>c.rows?.length)?.sourceUrl || profile.officialUrl || PORTAL,notice:`${profile.sourceNotice||''} Valores pessoais, exercício do cargo e gestão permanecem separados. Contratos são vinculados ao órgão/território, sem prova de autoria pessoal ou permanência no cargo. Dados ausentes não entram em totais.`,year,fetchedAt:new Date().toISOString()}
 }
 const invalidExpansion = message => Object.assign(new Error(message), {status:400})
 async function canonicalExpansionProfile(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw invalidExpansion('Perfil inválido.')
   const role = normalizeRole(input.role)
   if (!['senator','governor','mayor','president','minister'].includes(role)) throw invalidExpansion('Cargo inválido.')
+  if(role!=='senator') {
+    const canonical=NAMED_DIRECTORY.profiles.find(p=>p.role===role&&p.id===input.id)
+    if(!canonical) throw invalidExpansion('Perfil nominal não encontrado no diretório oficial.')
+    return canonical
+  }
   const params = new URLSearchParams({role})
   let id = String(input.id || '')
   if (role === 'senator') {
     const externalId = String(input.externalId || id.replace('senate-',''))
     if (!/^\d{1,10}$/.test(externalId)) throw invalidExpansion('Identificador de senador inválido.')
     id = `senate-${externalId}`
-  }
-  if (role === 'governor' || role === 'mayor') {
-    const ibgeId = String(input.ibgeId || id.replace(`${role}-`,''))
-    if (!(role === 'mayor' ? /^\d{7}$/ : /^\d{2}$/).test(ibgeId)) throw invalidExpansion('Território inválido.')
-    const place = await expansionJson(`${IBGE}${role === 'mayor' ? 'municipios' : 'estados'}/${ibgeId}`)
-    if (!place || Array.isArray(place) || !place.nome) throw invalidExpansion('Território inexistente.')
-    params.set(role === 'mayor' ? 'city' : 'name',place.nome)
-    id = `${role}-${ibgeId}`
   }
   const result = await searchExpansion(params)
   const canonical = result.data.find(profile => profile.id === id)

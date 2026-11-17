@@ -1,6 +1,36 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {normalizeCeaps, expansionCosts, expansionResponse} from '../worker/expansion.js'
+import {normalizeCeaps, expansionCosts, expansionResponse,searchExpansion} from '../worker/expansion.js'
+import {NAMED_DIRECTORY} from '../worker/political-profiles.js'
+
+test('nominal official directory finds each executive office and retains temporal provenance',async()=>{
+  for(const [role,name] of [['president','Lula'],['minister','Miriam'],['governor','Tarcisio'],['mayor','Ricardo Nunes']]) {
+    const result=await searchExpansion(new URLSearchParams({role,name}))
+    assert.ok(result.data.length,`${role}: ${name}`)
+    assert.ok(result.data.every(p=>p.role===role&&p.sourceMode==='official'&&p.sourceNotice&&p.sourceDate&&p.officialUrl.startsWith('https://')))
+  }
+  for(const [role,count] of Object.entries(NAMED_DIRECTORY.counts)) assert.equal(NAMED_DIRECTORY.profiles.filter(p=>p.role===role).length,count)
+  assert.equal(NAMED_DIRECTORY.counts.governor,27)
+  assert.equal(NAMED_DIRECTORY.counts.president,1)
+  assert.ok(NAMED_DIRECTORY.counts.mayor>5000)
+  for(const p of NAMED_DIRECTORY.profiles.filter(p=>p.electionYear)) {
+    assert.equal(p.electionYear,p.role==='mayor'?2024:2022)
+    assert.ok(p.termStart&&p.termEnd)
+    assert.match(p.sourceNotice,/histórico/)
+  }
+})
+
+test('mayor contracts outside the elected mandate remain unavailable without upstream requests',async()=>{
+  const original=globalThis.fetch
+  globalThis.fetch=async()=>{throw new Error('Must not fetch another administration')}
+  try {
+    const profile=NAMED_DIRECTORY.profiles.find(p=>p.role==='mayor'&&p.name.includes('RICARDO NUNES'))
+    assert.ok(profile)
+    const result=await expansionCosts(profile,2024)
+    assert.ok(result.components.every(c=>c.value===null&&c.rows.length===0))
+    assert.match(result.notice,/fora do mandato/)
+  } finally {globalThis.fetch=original}
+})
 
 test('CEAPS distinguishes unavailable values from zero and retains credits',()=>{
   for (const value of [null,undefined,'','  ',true,{},'invalid']) assert.equal(normalizeCeaps({valorReembolsado:value}).value,null)
@@ -70,20 +100,21 @@ test('cost route resolves profiles against official identities and ignores calle
   } finally {globalThis.fetch=original}
 })
 
-test('federal directory preserves SIORG list/detail shapes and restricts contracts to the executive agency',async()=>{
+test('nominal minister directory resolves SIORG detail and restricts contracts to the executive agency',async()=>{
   const original=globalThis.fetch
+  const named=NAMED_DIRECTORY.profiles.find(p=>p.role==='minister'&&p.externalId)
+  assert.ok(named,'Official minister snapshot must contain a confirmed SIORG mapping')
   globalThis.fetch=async url=>{
     const address=String(url)
-    if(address.endsWith('/doc/orgao-entidade')) return Response.json({unidades:[{codigoUnidade:'https://api.siorg.gov.br/id/unidade-organizacional/777',codigoEsfera:'https://api.siorg.gov.br/id/esfera/1',codigoPoder:'https://api.siorg.gov.br/id/poder/1',nome:'Ministério de Teste',sigla:'MT'}]})
-    if(address.endsWith('/777/completa')) return Response.json({unidade:{nome:'Ministério de Teste',autoridade:{denominacao:{descricao:'Ministro'}}}})
+    if(address.endsWith(`/${named.externalId}/completa`)) return Response.json({unidade:{nome:named.institutionalName,autoridade:{denominacao:{descricao:'Ministro'}}}})
     assert.match(address,/pncp\.gov\.br/)
     const contract=(id,name,power)=>({numeroControlePNCP:id,orgaoEntidade:{razaoSocial:name,esferaId:'F',poderId:power,cnpj:'123'},valorInicial:250,anoContrato:2022,sequencialContrato:1})
-    return Response.json({data:[contract('correct','Ministério de Teste','E'),contract('other-agency','Outro Ministério','E'),contract('legislative','Ministério de Teste','L')]})
+    return Response.json({data:[contract('correct',named.institutionalName,'E'),contract('other-agency','Outro Ministério','E'),contract('legislative',named.institutionalName,'L')]})
   }
   try {
-    const search=await expansionResponse(new Request('https://app.test/api/expansion/search?role=minister'))
-    const profile=(await search.json()).data[0]
-    assert.equal(profile.id,'siorg-777')
+    const search=await expansionResponse(new Request(`https://app.test/api/expansion/search?${new URLSearchParams({role:'minister',name:named.name})}`))
+    const profile=(await search.json()).data.find(p=>p.id===named.id)
+    assert.equal(profile.name,named.name)
     assert.equal(profile.scope,'administration')
     const response=await expansionResponse(new Request(`https://app.test/api/expansion/costs?${new URLSearchParams({profile:JSON.stringify(profile),year:'2022'})}`))
     assert.equal(response.status,200,await response.clone().text())

@@ -22,7 +22,7 @@ O build gera a interface em `dist/` e um Worker em `dist/server/index.js`. As co
 
 ## Dados da Câmara
 
-As consultas de representantes usam a [API da Câmara](https://dadosabertos.camara.leg.br/). As despesas da CEAP usam arquivos oficiais anuais, com snapshots compactados em `.data/`. O manifesto registra origem, data da coleta e SHA-256 do arquivo anual.
+A busca de deputados usa preferencialmente o cadastro oficial coletado em `public/deputados.json`, com origem e data de atualização. Se o arquivo estiver indisponível ou inválido, consulta a [API da Câmara](https://dadosabertos.camara.leg.br/). A composição pode mudar depois da coleta. As despesas da CEAP usam arquivos oficiais anuais, com snapshots compactados em `.data/`. O manifesto registra origem, data da coleta e SHA-256 do arquivo anual.
 
 Para atualizar os snapshots de 2025 e 2026:
 
@@ -39,12 +39,13 @@ A apuração de remuneração e gabinete consulta páginas oficiais da Câmara. 
 | Área | Implementado | Limites |
 | --- | --- | --- |
 | Senado | Busca de senadores em exercício e reembolsos CEAPS por ano | A lista atual não reconstitui mandatos anteriores; remuneração e demais custos de gabinete ainda não integrados |
-| Presidência e ministérios | Diretório institucional atual do SIORG e consulta de contratos do PNCP | Busca pelo órgão, sem cadastro de titulares ou folha individual; contratos têm cobertura parcial |
-| Estados e municípios | Busca territorial do IBGE e consulta de contratos do PNCP | Busca pelo território, sem cadastro nominal de governadores e prefeitos; remuneração e despesas pessoais ainda não integradas |
+| Presidência e governadores | Busca nominal dos eleitos em 2022, com período de mandato e fonte do TSE | Registro histórico eleitoral; não confirma ocupação atual, afastamentos ou substituições |
+| Prefeitos | Busca nominal de eleitos em 2024 e correspondência territorial do IBGE | Cobertura parcial de municípios; não abrange automaticamente eleições suplementares ou sucessões |
+| Ministros | Busca nominal do diretório do Planalto, com órgão identificado pelo SIORG | Retrato da data de coleta; não reconstitui a ocupação em anos anteriores |
 
-As listas territoriais exibem até 100 resultados; refine a UF e o nome para encontrar o município desejado. Consultas ao PNCP exibem a primeira página disponível e não calculam total consolidado. Os valores dos contratos não são pagamentos efetuados e não entram em um total pessoal. A existência de um território no IBGE não garante registros no PNCP no período selecionado.
+A busca principal consulta todos os cargos por nome, com filtros de cargo, partido e UF. Os perfis usam o mesmo painel, extrato e simulador, preservando as diferenças entre as fontes. Consultas ao PNCP exibem a primeira página disponível, filtrada pelo Executivo e pela administração consultada. O simulador pode usar o subtotal dos contratos de valor conhecido dessa amostra, explicitamente identificado como valor contratado; não representa total anual, pagamentos efetuados ou custo pessoal. A existência de um perfil não garante registros financeiros no período selecionado. Sem dados, o valor permanece indisponível; um zero publicado permanece zero.
 
-O diretório atual do SIORG e a lista atual do Senado não identificam automaticamente quem ocupava o cargo em um ano passado. Bens eleitorais do TSE, finanças fiscais do Siconfi, folhas de pagamento de estados e municípios, viagens e importação dos cartões presidenciais permanecem fora da integração automática. A interface informa essas lacunas e aponta as fontes disponíveis.
+Os snapshots nominais são gerados por `python scripts/refresh-political-profiles.py` em `worker/political-profiles.js`, com data, origem e ressalvas temporais. Presidente e governadores correspondem à eleição de 2022; prefeitos à de 2024. Há municípios ainda sem correspondência territorial, registrados em `unmatchedMunicipalities` no snapshot. A lista atual do Senado e o diretório de ministros não identificam automaticamente quem ocupava o cargo em um ano passado. Bens eleitorais do TSE, finanças fiscais do Siconfi, folhas de pagamento do Executivo, viagens e importação dos cartões presidenciais permanecem fora da integração automática. A interface informa essas lacunas e aponta as fontes disponíveis.
 
 As rotas locais são `GET /api/expansion/search` (filtros `role`, `name`, `state`, `city`) e `GET /api/expansion/costs` (`profile` serializado em JSON e `year`). Os perfis de consulta de custos são resolvidos novamente nas fontes oficiais; nome, URL e UF fornecidos pelo cliente não podem redefinir a identidade consultada. Respostas inválidas usam HTTP 400; indisponibilidade de fonte pode usar HTTP 502 ou aparecer como indisponibilidade do componente, sem valor monetário.
 

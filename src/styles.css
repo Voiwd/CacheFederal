@@ -612,3 +612,11 @@ button.source-pill:focus-visible{outline:3px solid var(--green);outline-offset:4
 .product-card:nth-child(4) .product-photo img,.product-card:nth-child(8) .product-photo img,.product-card:nth-child(9) .product-photo img{object-fit:contain;background:var(--paper)}
 @media(max-width:620px){.cost-breakdown{padding:15px}.cost-rows>div{font-size:.75rem}.cost-rows strong{white-space:normal;text-align:right}}
 @media(prefers-reduced-motion:reduce){.receipt-content{animation:none}}
+
+/* Shared search and coverage for every office. */
+.search-box .role-filter { grid-column:1/-1; width:100%; border:0; border-bottom:1px solid #d5cec0; background:transparent; padding:8px 4px; font:inherit; font-size:.85rem; color:var(--green); font-weight:700; }
+.coverage-detail { display:block; max-width:650px; color:var(--muted); font-size:.78rem; line-height:1.5; margin-top:6px; }
+.cost-rows>div { gap:18px; align-items:start; }
+.cost-rows>div>strong { flex-shrink:0; }
+@media(max-width:620px) { .cost-rows>div { flex-direction:column; gap:8px; } }
+.cost-rows>div>span { display:block; }
