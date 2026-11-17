@@ -310,7 +310,11 @@ export function formatCompactNumber(value, maximumFractionDigits = 1) {
 
 export function formatDate(value) {
   if (!value) return 'Data não informada'
-  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(new Date(`${value}T00:00:00Z`))
+  const datePart = String(value).match(/^\d{4}-\d{2}-\d{2}/)?.[0]
+  if (!datePart) return 'Data não informada'
+  const date = new Date(`${datePart}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return 'Data não informada'
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date)
 }
 
 export { demoPoliticians }
