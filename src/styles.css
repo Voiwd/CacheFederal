@@ -540,3 +540,28 @@ footer a { display:flex; align-items:center; gap:6px; height:max-content; font-w
 
 @media(max-width:900px){.topbar nav{display:none}.hero{grid-template-columns:1fr}.hero-receipt{display:none}.workspace{grid-template-columns:1fr}.results-rail{position:static;grid-template-columns:repeat(2,1fr)}.results-rail .section-label,.results-rail .notice{grid-column:1/-1}.comparison-grid{grid-template-columns:repeat(2,1fr)}.products-grid{grid-template-columns:repeat(2,1fr)}footer{grid-template-columns:1fr 1fr}.footer-brand{grid-column:1/-1}}
 @media(max-width:620px){.topbar{padding:0 16px}.source-pill{display:none}.hero{width:calc(100% - 28px);padding-top:38px}.hero-copy h1{font-size:3rem}.search-box{grid-template-columns:1fr 70px}.search-input,.primary-btn{grid-column:1/-1}.workspace{width:calc(100% - 28px)}.results-rail{grid-template-columns:1fr}.profile-head{align-items:flex-start}.avatar.large{width:58px}.profile-main .eyebrow{display:none}.stats-grid{grid-template-columns:1fr}.comparison-grid,.products-grid{grid-template-columns:1fr}.section-heading,.sim-header,.cart-footer{align-items:flex-start;flex-direction:column}.section-heading>p{text-align:left}.balance{width:100%;text-align:left}.comparisons,.chart-section,.simulator,.statement{padding:15px}.chart-wrap{margin-left:-25px}.tabbar{overflow:auto}.tabbar button{min-width:105px}footer{grid-template-columns:1fr}}
+
+/* Consulta, recibo e produtos */
+.brand-logo{width:46px;height:46px;object-fit:contain;flex:none}
+.results-rail{max-height:calc(100dvh - 112px);overflow-y:auto;overscroll-behavior:contain;padding:4px 10px 12px 3px;scrollbar-width:thin;scrollbar-color:var(--green) transparent}
+.results-rail .section-label{position:sticky;top:-4px;z-index:2;background:var(--paper);padding:8px 4px}
+.search-area{position:relative;z-index:10}
+.name-suggestions{position:absolute;top:calc(100% + 8px);left:0;right:0;max-height:380px;overflow:auto;border:2px solid var(--ink);border-radius:12px;background:var(--white);box-shadow:var(--shadow-lg);padding:7px}
+.name-suggestions button{display:flex;align-items:center;gap:12px;width:100%;padding:10px;border:0;border-radius:8px;background:transparent;text-align:left;cursor:pointer}
+.name-suggestions button:hover,.name-suggestions button:focus-visible{background:var(--mint)}
+.name-suggestions button>span{display:grid;flex:1}.name-suggestions small{color:var(--muted)}
+.name-suggestions p{padding:10px;font-size:.85rem}
+.hero-copy h1{font-size:clamp(3rem,6vw,5.6rem)}
+.receipt-person{display:flex;align-items:center;gap:10px;margin:20px 0}
+.receipt-person img{border-radius:50%;object-fit:cover}.receipt-person>div{display:grid;gap:4px}
+.receipt-caption{font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.receipt-expense{gap:10px;padding:12px 0;margin:0;align-items:start}.receipt-expense>span{min-width:0;overflow-wrap:anywhere;font-size:.65rem}.receipt-expense small{display:block;margin-top:4px;font-size:.6rem}.receipt-expense strong{white-space:nowrap;font-size:.8rem}
+.receipt-controls{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:16px;font-size:.65rem;color:var(--muted)}
+.receipt-controls button{border:1px solid var(--ink);border-radius:6px;padding:5px 8px;background:var(--paper);cursor:pointer}
+.hero-receipt .official-link{font-size:.7rem}
+.product-photo{position:relative;height:150px;overflow:hidden;border:1.5px solid var(--ink);border-radius:11px;background:var(--paper-deep)}
+.product-photo img{width:100%;height:100%;object-fit:cover;object-position:center}
+.product-photo>span{position:absolute;right:5px;bottom:5px;padding:2px 5px;border-radius:4px;background:#fffdf0e8;font-size:.55rem}
+.product-category{position:relative;z-index:1}.pagination{padding:16px 0;font-size:.75rem;flex-wrap:wrap}.pagination>div{display:flex;align-items:center;gap:10px}.pagination button{font-size:.75rem;min-height:38px}.pagination button:disabled{opacity:.35;cursor:default}
+@media(max-width:900px){.results-rail{position:sticky;top:80px;max-height:330px;position:relative;top:0}.hero-receipt{display:block;width:min(100%,480px);margin:0 auto 25px}.hero{gap:32px}.product-photo{height:180px}}
+@media(max-width:620px){.results-rail{max-height:270px}.pagination>div{display:flex}.hero-receipt{padding:18px}.product-photo{height:210px}}

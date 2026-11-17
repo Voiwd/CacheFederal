@@ -143,7 +143,7 @@ function normalizePolitician(item) {
 function normalizeExpense(item, index) {
   const netValue = Number(item.valorLiquido ?? item.valorDocumento ?? 0)
   return {
-    id: `${item.codDocumento || item.numDocumento || 'despesa'}-${item.numRessarcimento || index}`,
+    id: `${item.codDocumento || item.numDocumento || 'despesa'}-${item.numRessarcimento || 0}-${index}`,
     date: item.dataDocumento || null,
     year: Number(item.ano),
     month: Number(item.mes),
@@ -170,14 +170,24 @@ export async function searchPoliticians(filters = {}, options = {}) {
         nome: name.trim(),
         siglaPartido: party.trim().toUpperCase(),
         siglaUf: state.trim().toUpperCase(),
-        itens: 30,
+        itens: 100,
         ordem: 'ASC',
         ordenarPor: 'nome',
       },
       options.signal,
     )
+    const politicians = [...payload.dados]
+    if (options.all) {
+      let page = 2
+      let hasNext = payload.links?.some(link => link.rel === 'next')
+      while (hasNext) {
+        const next = await request('/deputados', { itens: 100, pagina: page++, ordem: 'ASC', ordenarPor: 'nome' }, options.signal)
+        politicians.push(...next.dados)
+        hasNext = next.links?.some(link => link.rel === 'next')
+      }
+    }
     return {
-      data: payload.dados.map(normalizePolitician),
+      data: politicians.map(normalizePolitician),
       sourceMode: 'official',
       sourceUrl: payload.requestUrl,
       notice: 'Resultados obtidos agora na API oficial da Câmara.',
@@ -235,17 +245,22 @@ export async function getExpenses(politicianId, filters = {}, options = {}) {
   const allItems = []
   let page = 1
   let sourceUrl = null
-  const maxPages = options.maxPages || 8
+  const maxPages = options.maxPages || Infinity
 
   do {
     const payload = await request(
       `/deputados/${politicianId}/despesas`,
-      { ano: year, mes: month, itens: 100, pagina: page, ordem: 'DESC', ordenarPor: 'dataDocumento' },
+      { ano: year, mes: month, itens: 50, pagina: page, ordem: 'DESC', ordenarPor: 'dataDocumento' },
       options.signal,
     )
     sourceUrl ||= payload.requestUrl
     allItems.push(...payload.dados)
     const next = payload.links?.find((link) => link.rel === 'next')
+    options.onProgress?.(summarizeExpenses(allItems.map(normalizeExpense), {
+      sourceMode: 'official', sourceUrl, complete: !next,
+      fetchedAt: new Date().toISOString(),
+      notice: next ? `${allItems.length} despesas carregadas. Consultando o restante do período…` : 'Todas as despesas do período foram carregadas.',
+    }))
     if (!next || payload.dados.length === 0) break
     page += 1
   } while (page <= maxPages)
@@ -259,7 +274,7 @@ export async function getExpenses(politicianId, filters = {}, options = {}) {
     sourceUrl,
     notice:
       page > maxPages
-        ? `Foram carregadas as primeiras ${maxPages * 100} despesas do período.`
+        ? `Foram carregadas as primeiras ${maxPages * 50} despesas do período.`
         : 'Despesas obtidas na API oficial da Câmara dos Deputados.',
   })
 }
@@ -284,7 +299,7 @@ export function summarizeExpenses(expenses, metadata = {}) {
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value)
 
-  return { data: expenses, total, byCategory, bySupplier, ...metadata }
+  return { data: expenses, total, byCategory, bySupplier, complete: true, ...metadata }
 }
 
 export function buildComparisons(value) {
