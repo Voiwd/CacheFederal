@@ -1,3 +1,6 @@
+import {ADDITIONAL_PROFILES,PROFILE_ENRICHMENTS} from './additional-profiles.js'
+import {PARLIAMENT_DIRECTORY} from './parliament-directory.js'
+import {getRoleReferenceCosts} from './reference-costs.js'
 import {NAMED_DIRECTORY} from './political-profiles.js'
 // Official sources only. Missing personal data is never represented as zero.
 const expansionCache = new Map()
@@ -6,8 +9,13 @@ const CEAPS = 'https://adm.senado.gov.br/adm-dadosabertos/api/v1/senadores/despe
 const PORTAL = 'https://portaldatransparencia.gov.br/'
 const PNCP = 'https://pncp.gov.br/api/consulta/v1/contratos'
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+const enrichProfile = profile => {
+  const extra=PROFILE_ENRICHMENTS[profile.id] || PROFILE_ENRICHMENTS[profile.name] || PROFILE_ENRICHMENTS[fold(profile.name)] || {}
+  return {...profile,...extra}
+}
+const namedProfiles=()=>[...NAMED_DIRECTORY.profiles,...ADDITIONAL_PROFILES].map(enrichProfile)
 export function normalizeRole(value) {
-  return ({senadores:'senator',senador:'senator',ministros:'minister',ministro:'minister',presidente:'president',governadores:'governor',governador:'governor',prefeitos:'mayor',prefeito:'mayor'})[fold(value)] || value
+  return ({senadores:'senator',senador:'senator',ministros:'minister',ministro:'minister',presidente:'president',governadores:'governor',governador:'governor',prefeitos:'mayor',prefeito:'mayor',ministrostf:'justice',stf:'justice'})[fold(value)] || value
 }
 async function expansionJson(url) {
   const cached = expansionCache.get(url)
@@ -32,16 +40,16 @@ export async function searchExpansion(params) {
   const role = normalizeRole(params.get('role'))
   const name = fold(params.get('name') || params.get('query'))
   const state = String(params.get('state') || '').toUpperCase()
-  if (['governor','mayor','president','minister'].includes(role)) {
+  if (['governor','mayor','president','minister','justice'].includes(role)) {
     const party=fold(params.get('party'))
     const cityFilter=fold(params.get('city'))
-    const matches=NAMED_DIRECTORY.profiles.filter(p=>p.role===role&&(!state||p.state===state)&&(!party||fold(p.party)===party)&&(!name||[p.name,p.fullName,p.institutionalName].some(v=>fold(v).includes(name)))&&(!cityFilter||fold(p.city).includes(cityFilter)))
+    const matches=namedProfiles().filter(p=>p.role===role&&(!state||p.state===state)&&(!party||fold(p.party)===party)&&(!name||[p.name,p.fullName,p.institutionalName,...(p.aliases||[])].some(v=>fold(v).includes(name)))&&(!cityFilter||fold(p.city).includes(cityFilter)))
     return {data:matches.slice(0,100),total:matches.length,generatedAt:NAMED_DIRECTORY.generatedAt,notice:role==='minister'?'Nomes do diretório oficial do Planalto, com data de consulta no perfil. Histórico de titulares e remuneração não integrado.':'Nomes eleitos nas eleições ordinárias: governadores/presidente 2022 e prefeitos 2024. Registros eleitorais históricos não confirmam ocupação atual. Até 100 resultados; refine nome, partido ou UF.'}
   }
-  if (role === 'senator') {
-    const result = await expansionJson(SENATORS)
-    const data = result.ListaParlamentarEmExercicio.Parlamentares.Parlamentar.map(normalizeSenator).filter(p=>(!name||fold(p.name).includes(name))&&(!state||p.state===state))
-    return {data,notice:'Senadores em exercício na consulta atual. A lista não reconstitui a composição de anos anteriores.'}
+  if (role === 'senator' || role === 'deputy') {
+    const profiles=role==='senator'?PARLIAMENT_DIRECTORY.senators:PARLIAMENT_DIRECTORY.deputies
+    const party=fold(params.get('party'))
+    return {data:profiles.map(enrichProfile).filter(p=>(!name||fold(p.name).includes(name))&&(!state||p.state===state)&&(!party||fold(p.party)===party)),notice:'Cadastro parlamentar oficial em arquivo, com data da coleta no perfil. Valores de referência por cargo separados dos registros publicados.'}
   }
   throw new Error('Cargo não reconhecido.')
 }
@@ -52,6 +60,7 @@ export async function expansionCosts(profile,year) {
   if (profile.termStart && (year < Number(profile.termStart.slice(0,4)) || year > Number(profile.termEnd.slice(0,4)))) {
     return {components,year,sourceUrl:profile.officialUrl,notice:`Ano fora do mandato nominal da eleição consultada (${profile.termStart.slice(0,4)}–${profile.termEnd.slice(0,4)}). Não foram atribuídas despesas de outra gestão.`}
   }
+  if (role === 'justice' || role === 'deputy') return {components,year,sourceUrl:profile.officialUrl,notice:'Referências legais do cargo são exibidas em base separada; folha individual não integrada.'}
   if (role === 'senator') {
     components[0].sourceUrl='https://www25.senado.leg.br/web/transparencia/sen'
     const id = String(profile.externalId || profile.id?.replace('senate-',''))
@@ -101,9 +110,14 @@ const invalidExpansion = message => Object.assign(new Error(message), {status:40
 async function canonicalExpansionProfile(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw invalidExpansion('Perfil inválido.')
   const role = normalizeRole(input.role)
-  if (!['senator','governor','mayor','president','minister'].includes(role)) throw invalidExpansion('Cargo inválido.')
+  if (!['deputy','senator','governor','mayor','president','minister','justice'].includes(role)) throw invalidExpansion('Cargo inválido.')
+  if(role==='deputy') {
+    const canonical=PARLIAMENT_DIRECTORY.deputies.find(p=>String(p.id)===String(input.id))
+    if(!canonical)throw invalidExpansion('Deputado não encontrado no cadastro oficial.')
+    return enrichProfile(canonical)
+  }
   if(role!=='senator') {
-    const canonical=NAMED_DIRECTORY.profiles.find(p=>p.role===role&&p.id===input.id)
+    const canonical=namedProfiles().find(p=>p.role===role&&p.id===input.id)
     if(!canonical) throw invalidExpansion('Perfil nominal não encontrado no diretório oficial.')
     return canonical
   }
@@ -114,7 +128,10 @@ async function canonicalExpansionProfile(input) {
     if (!/^\d{1,10}$/.test(externalId)) throw invalidExpansion('Identificador de senador inválido.')
     id = `senate-${externalId}`
   }
-  const result = await searchExpansion(params)
+  const staticProfile=PARLIAMENT_DIRECTORY.senators.find(p=>p.id===id)
+  if(staticProfile)return enrichProfile(staticProfile)
+  const upstream=await expansionJson(SENATORS)
+  const result={data:upstream.ListaParlamentarEmExercicio.Parlamentares.Parlamentar.map(normalizeSenator)}
   const canonical = result.data.find(profile => profile.id === id)
   if (!canonical) throw invalidExpansion('Perfil não encontrado na fonte oficial.')
   return canonical
@@ -124,16 +141,16 @@ export async function expansionResponse(request) {
     const url = new URL(request.url)
     let result
     if(url.pathname==='/api/expansion/search') {
-      if (!['senator','governor','mayor','president','minister'].includes(normalizeRole(url.searchParams.get('role')))) throw invalidExpansion('Cargo inválido.')
+      if (!['deputy','senator','governor','mayor','president','minister','justice'].includes(normalizeRole(url.searchParams.get('role')))) throw invalidExpansion('Cargo inválido.')
       result=await searchExpansion(url.searchParams)
     }
-    else if(url.pathname==='/api/expansion/costs') {
+    else if(url.pathname==='/api/expansion/costs'||url.pathname==='/api/expansion/references') {
       const year=Number(url.searchParams.get('year'))
-      if(!Number.isInteger(year)||year<2008||year>new Date().getUTCFullYear()) return Response.json({error:'Ano inválido.'},{status:400})
+      if(!Number.isInteger(year)||year<1889||year>new Date().getUTCFullYear()) return Response.json({error:'Ano inválido.'},{status:400})
       let input
       try { input=JSON.parse(url.searchParams.get('profile')||'null') } catch { throw invalidExpansion('Perfil inválido.') }
       const profile=await canonicalExpansionProfile(input)
-      result=await expansionCosts(profile,year)
+      result=url.pathname.endsWith('/references')?getRoleReferenceCosts(profile,year):await expansionCosts(profile,year)
     } else return Response.json({error:'Rota não encontrada.'},{status:404})
     return Response.json(result,{headers:{'Cache-Control':'public, max-age=300'}})
   } catch(e) {return Response.json({error:e.message || 'Fonte oficial indisponível.'},{status:e.status || 502})}

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {adaptExpandedCosts,normalizeUnifiedProfile,searchUnifiedPoliticians,searchDeputySnapshot,rankUnifiedProfiles} from '../src/lib/unified.js'
+import {adaptExpandedCosts,normalizeUnifiedProfile,searchUnifiedPoliticians,searchDeputySnapshot,rankUnifiedProfiles,selectSimulationBasis,getUnifiedExpenses} from '../src/lib/unified.js'
 
 test('published CEAPS zero remains zero while unavailable CEAPS cannot become a simulation budget',()=>{
   const profile={role:'senator',scope:'person'}
@@ -14,11 +14,14 @@ test('published CEAPS zero remains zero while unavailable CEAPS cannot become a 
 })
 
 test('administration simulation uses only finite contract sample amounts and never payroll or office expenses',()=>{
-  const result=adaptExpandedCosts({role:'mayor',scope:'person'},{components:[
+  const adapted=adaptExpandedCosts({role:'mayor',scope:'person'},{components:[
     {kind:'remuneration',value:2000,rows:[{id:'salary',value:2000}]},
     {kind:'office',value:500,rows:[{id:'office',value:500}]},
     {kind:'administration',value:999999,status:'partial',rows:[{id:'a',value:100.10},{id:'a',value:100.10},{id:'b',value:20.05},{id:'unknown',value:null},{id:'infinite',value:Infinity}]},
   ]},2025)
+  assert.equal(adapted.selectedSimulationBasis,'personalPublished')
+  assert.equal(adapted.simulationBudget,2500)
+  const result=selectSimulationBasis(adapted,'administration')
   assert.equal(result.simulationBudget,120.15)
   assert.equal(result.total,120.15)
   assert.equal(result.complete,false)
@@ -78,13 +81,71 @@ test('one nominal query spans all offices and retains available sources when one
   }
   try {
     const result=await searchUnifiedPoliticians({name:'Ana',role:'all'})
-    assert.deepEqual(requested.sort(),['deputy','governor','mayor','minister','president','senator'])
-    assert.equal(result.data.length,5)
+    assert.deepEqual(requested.sort(),['deputy','governor','justice','mayor','minister','president','senator'])
+    assert.equal(result.data.length,6)
     assert.equal(result.partial,true)
     assert.equal(result.sourceMode,'official')
     assert.ok(result.data.every(profile=>profile.name.startsWith('Ana')))
     assert.match(result.notice,/temporariamente indisponíveis/)
   } finally {globalThis.fetch=original}
+})
+
+test('legal references, CEAPS and contracts remain separately selectable and never inflate each other',()=>{
+  const result=adaptExpandedCosts({role:'senator'},{components:[
+    {kind:'office',value:100,status:'available',rows:[{id:'ceaps',value:100}]},
+    {kind:'reference:remuneration',value:1200,status:'reference',rows:[{id:'salary-reference',value:1200}]},
+    {kind:'reference:allowances',value:null,status:'reference',rows:[{id:'allowance-limit',value:null,monthlyLimit:100}]},
+    {kind:'administration',value:null,rows:[{id:'contract',value:5000}]},
+  ]},2025)
+  assert.equal(result.selectedSimulationBasis,'reference')
+  assert.equal(result.simulationBudget,1200)
+  assert.equal(result.unitType,'reference')
+  assert.equal(result.data.find(r=>r.id==='salary-reference').sourceMode,'reference')
+  assert.equal(result.data.find(r=>r.id==='salary-reference').basisId,'reference')
+  assert.equal(result.byCategory.reduce((s,r)=>s+r.value,0),1200)
+  assert.equal(selectSimulationBasis(result,'personalPublished').simulationBudget,100)
+  assert.equal(selectSimulationBasis(result,'administration').simulationBudget,5000)
+  assert.equal(selectSimulationBasis(result,'missing'),result)
+})
+
+test('references reach the dashboard before slow published data and survive its failure',async()=>{
+  const original=globalThis.fetch,progress=[]
+  let releasePublished
+  const pending=new Promise(resolve=>{releasePublished=resolve})
+  globalThis.fetch=async address=>{
+    const url=new URL(String(address),'https://app.test')
+    if(url.pathname.endsWith('/references'))return Response.json({components:[{kind:'reference:remuneration',value:1200,status:'reference',rows:[{id:'r',value:1200}]}]})
+    await pending
+    return Response.json({error:'Fonte publicada indisponível'},{status:502})
+  }
+  try {
+    const resultPromise=getUnifiedExpenses({id:'senate-1',role:'senator'},2025,{onProgress:result=>progress.push(result)})
+    await new Promise(resolve=>setTimeout(resolve,0))
+    assert.ok(progress.length)
+    assert.equal(progress[0].simulationBudget,1200)
+    releasePublished()
+    const result=await resultPromise
+    assert.equal(result.simulationBudget,1200)
+    assert.match(result.notice,/Dados publicados indisponíveis/)
+  } finally {releasePublished();globalThis.fetch=original}
+})
+
+test('deputy CEAP progress and final result preserve separately selected salary reference',async()=>{
+  const original=globalThis.fetch,progress=[]
+  globalThis.fetch=async address=>{
+    const url=new URL(String(address),'https://app.test')
+    if(url.pathname.endsWith('/references'))return Response.json({components:[{kind:'reference:remuneration',value:1200,status:'reference',rows:[{id:'r',value:1200}]}]})
+    return Response.json({columns:['category','supplier','netValue'],rows:Array.from({length:67},()=>['CEAP','Fornecedor',1]),complete:true,sourceUrl:'https://www.camara.leg.br/cotas/'})
+  }
+  try {
+    const result=await getUnifiedExpenses({id:123,role:'deputy'},2025,{onProgress:value=>progress.push(value)})
+    assert.equal(result.simulationBudget,1200)
+    assert.equal(selectSimulationBasis(result,'personalPublished').simulationBudget,67)
+    assert.ok(progress.length)
+    assert.ok(progress.every(value=>value.simulationBudget===1200&&value.simulationBases.some(b=>b.id==='reference')))
+    assert.equal(result.data.filter(row=>row.basisId==='personalPublished').length,67)
+    assert.equal(result.data.filter(row=>row.basisId==='reference').length,1)
+  }finally{globalThis.fetch=original}
 })
 
 test('official deputy snapshot filters name party and state and preserves collection provenance',async()=>{

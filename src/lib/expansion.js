@@ -14,3 +14,7 @@ export function searchExpandedProfiles(filters={},options={}) {
 export function getExpandedCosts(profile,year,options={}) {
   return readExpansion('costs',{profile:JSON.stringify(profile),year},options.signal)
 }
+
+export function getRoleReferences(profile,year,options={}) {
+  return readExpansion('references',{profile:JSON.stringify(profile),year},options.signal)
+}
