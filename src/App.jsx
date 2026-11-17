@@ -3,6 +3,7 @@ import { Search, ArrowUpRight, RotateCcw, Minus, Plus, Landmark, ReceiptText, Sh
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { searchPoliticians, getExpenses, buildComparisons, formatCurrency, formatCompactNumber, formatDate, OFFICIAL_SOURCE, getMandateCosts, auditedTotal } from './lib/api.js'
 import { products, productDisclaimer } from './data/products.js'
+import Expansion from './components/Expansion.jsx'
 
 const RECEIPT_YEAR = 2025
 
@@ -57,7 +58,7 @@ export default function App() {
   function adjust(p,n){if(n>0&&p.price>balance)return;setCart(c=>({...c,[p.id]:Math.max(0,(c[p.id]||0)+n)}))}
 
   return <div className="app-shell">
-    <header className="topbar"><a className="brand" href="#top"><img className="brand-logo" src="/icon-brasil.png" alt=""/><span>Cachê <em>Federal</em></span></a><nav><a href="#simulador">Simulador</a><a href="#extrato">Extrato</a><a href="#metodologia">Metodologia</a></nav><SourcesButton/></header>
+    <header className="topbar"><a className="brand" href="#top"><img className="brand-logo" src="/icon-brasil.png" alt=""/><span>Cachê <em>Federal</em></span></a><nav><a href="#outros-cargos">Outros cargos</a><a href="#simulador">Simulador</a><a href="#extrato">Extrato</a><a href="#metodologia">Metodologia</a></nav><SourcesButton/></header>
     <main id="top">
       <section className="hero"><div className="hero-copy"><span className="eyebrow"><Sparkles size={15}/> Despesas da Câmara dos Deputados</span><h1>Quanto custou.<br/><span>Quem recebeu.</span></h1><p>Consulte despesas declaradas por deputados: fornecedor, valor e comprovante. Dinheiro público, conta por conta.</p>
         <div className="search-area" onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setSuggestOpen(false)}}><form className="search-box" onSubmit={runSearch}><label className="search-input"><Search/><input value={query} onFocus={()=>setSuggestOpen(true)} onKeyDown={e=>{if(e.key==='Escape')setSuggestOpen(false)}} onChange={e=>{setQuery(e.target.value);setSuggestOpen(true)}} aria-expanded={suggestOpen&&query.trim().length>=2} aria-controls="name-suggestions" autoComplete="off" placeholder="Busque um deputado" aria-label="Nome do deputado"/></label><input value={party} onChange={e=>setParty(e.target.value)} placeholder="Partido" aria-label="Partido"/><input value={state} onChange={e=>setState(e.target.value)} placeholder="UF" maxLength="2" aria-label="Estado"/><button className="primary-btn">Consultar <ArrowUpRight/></button></form>{suggestOpen&&query.trim().length>=2&&<div id="name-suggestions" className="name-suggestions" aria-label="Sugestões de deputados">{suggestBusy?<Loading text="Buscando nomes…"/>:suggestions.length?suggestions.map(p=><button type="button" key={p.id} onClick={()=>chooseSuggestion(p)}><div className="avatar">{p.photo?<img src={p.photo} alt=""/>:p.name[0]}</div><span><strong>{p.name}</strong><small>{p.party} · {p.state} · Deputado(a) federal</small></span><ArrowUpRight size={16}/></button>):<p>Nenhum deputado encontrado com esses filtros.</p>}</div>}</div>
@@ -70,8 +71,9 @@ export default function App() {
           <div className="legal-banner"><Info/><p><strong>Sobre os valores:</strong> o subtotal soma CEAP, remuneração bruta e benefícios em folha, e gabinete, conforme os dados disponíveis. Estornos da CEAP reduzem a despesa. Veja a composição abaixo.</p></div>
           {error?<div className="error-state"><strong>Não foi possível carregar as despesas.</strong><span>{error}</span></div>:loading?<Loading text="Carregando as primeiras 50 despesas…"/>:expenses&&<Dashboard audit={audit} auditLoading={auditLoading} auditError={auditError} expenses={expenses} year={year} tab={tab} setTab={setTab} budget={budget} balance={balance} spent={spent} cart={cart} setCart={setCart} adjust={adjust} category={category} setCategory={setCategory} shown={shown}/>}</>}</div>
       </section>
+      <Expansion/>
     </main>
-    <footer id="metodologia"><div className="brand footer-brand"><img className="brand-logo" src="/icon-brasil.png" alt=""/><span>Cachê Federal</span></div><div><strong>O que isto é</strong><p>Consulta de despesas parlamentares declaradas à Câmara dos Deputados. As comparações usam preços fixos com data e origem em cada produto.</p></div><div><strong>O que isto não é</strong><p>Os dados não representam patrimônio pessoal. A composição distingue remuneração, gastos do gabinete e despesas da CEAP.</p></div><a href={OFFICIAL_SOURCE.homepage} target="_blank" rel="noreferrer">Fonte oficial <ExternalLink/></a></footer>
+    <footer id="metodologia"><div className="brand footer-brand"><img className="brand-logo" src="/icon-brasil.png" alt=""/><span>Cachê Federal</span></div><div><strong>O que isto é</strong><p>Consulta de despesas parlamentares e fontes do Executivo federal, estadual e municipal. Cada consulta informa sua cobertura e origem. As comparações da Câmara usam preços fixos com data e fonte.</p></div><div><strong>O que isto não é</strong><p>Os dados não representam patrimônio pessoal. A composição distingue remuneração, gastos do gabinete e despesas da CEAP.</p></div><a href={OFFICIAL_SOURCE.homepage} target="_blank" rel="noreferrer">Fonte oficial <ExternalLink/></a></footer>
   </div>
 }
 
