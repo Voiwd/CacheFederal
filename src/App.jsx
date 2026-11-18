@@ -8,7 +8,7 @@ import { searchUnifiedPoliticians, getUnifiedExpenses, selectSimulationBasis } f
 const RECEIPT_YEAR = 2025
 
 const ROLE_OPTIONS = [['all','Todos os cargos'],['deputy','Deputados'],['senator','Senadores'],['president','Presidente'],['minister','Ministros'],['governor','Governadores'],['mayor','Prefeitos'],['justice','Ministros do STF']]
-const HERO_ROLES = ['Deputado?','Presidente?','Senador?']
+const HERO_ROLES = ['Deputado?','Senador?','Presidente?','Ministro?','Governador?','Prefeito?','Ministro do STF?']
 
 function availableYears(profile){const start=Number(profile.termStart?.slice(0,4))||2019,end=Math.min(2026,Number(profile.termEnd?.slice(0,4))||2026);return Array.from({length:Math.max(1,end-start+1)},(_,i)=>end-i)}
 
