@@ -437,7 +437,8 @@ img { max-width: 100%; }
 .source-pill i,.live-dot { width:8px; height:8px; border-radius:50%; background:#44a766; box-shadow:0 0 0 3px #cce8d3; }
 .hero { display:grid; grid-template-columns:1.35fr .65fr; align-items:center; gap:70px; width:min(calc(100% - 48px),var(--container)); margin:auto; }
 .hero-copy h1 { margin:0; font-size:clamp(3.5rem,7vw,6.5rem); }
-.hero-copy h1 span { color:var(--green); text-decoration:underline var(--yellow) .12em; text-underline-offset:.08em; }
+.hero-copy h1 .hero-title-lead { display:block; color:#000; font-family:'DM Sans',system-ui,sans-serif; }
+.hero-copy h1 .hero-title-role { display:block; min-height:1.04em; color:var(--green); font-family:'Space Grotesk','DM Sans',sans-serif; }
 .hero-copy>p { max-width:720px; color:var(--muted); font-size:1.12rem; }
 .search-box { display:grid; grid-template-columns:minmax(240px,1fr) 100px 62px auto; margin-top:28px; }
 .search-input { display:flex; align-items:center; gap:8px; min-width:0; }

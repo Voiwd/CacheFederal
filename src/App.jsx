@@ -8,6 +8,7 @@ import { searchUnifiedPoliticians, getUnifiedExpenses, selectSimulationBasis } f
 const RECEIPT_YEAR = 2025
 
 const ROLE_OPTIONS = [['all','Todos os cargos'],['deputy','Deputados'],['senator','Senadores'],['president','Presidente'],['minister','Ministros'],['governor','Governadores'],['mayor','Prefeitos'],['justice','Ministros do STF']]
+const HERO_ROLES = ['Deputado?','Presidente?','Senador?']
 
 function availableYears(profile){const start=Number(profile.termStart?.slice(0,4))||2019,end=Math.min(2026,Number(profile.termEnd?.slice(0,4))||2026);return Array.from({length:Math.max(1,end-start+1)},(_,i)=>end-i)}
 
@@ -15,6 +16,7 @@ const COLORS = ['#f2c94c','#71b280','#ef8354','#7ea8be','#d897d0','#a9c45a']
 
 export default function App() {
   const [role,setRole]=useState('all')
+  const [heroRoleIndex,setHeroRoleIndex]=useState(0)
   const [query,setQuery]=useState(''), [party,setParty]=useState(''), [state,setState]=useState('')
   const [results,setResults]=useState([]), [selected,setSelected]=useState(null), [year,setYear]=useState(2025)
   const [expenses,setExpenses]=useState(null), [notice,setNotice]=useState(''), [error,setError]=useState('')
@@ -25,6 +27,10 @@ export default function App() {
 
   const [suggestions,setSuggestions]=useState([]), [suggestOpen,setSuggestOpen]=useState(false), [suggestBusy,setSuggestBusy]=useState(false)
   const searchSequence=useRef(0)
+  useEffect(()=>{
+    const timer=setInterval(()=>setHeroRoleIndex(index=>(index+1)%HERO_ROLES.length),5000)
+    return()=>clearInterval(timer)
+  },[])
   useEffect(()=>{
     if(query.trim().length<2){setSuggestions([]);setSuggestBusy(false);return}
     const controller=new AbortController(); let active=true
@@ -78,7 +84,7 @@ export default function App() {
   return <div className="app-shell">
     <header className="topbar"><a className="brand" href="#top"><img className="brand-logo" src="/icon-brasil.png" alt=""/><span>Cachê <em>Federal</em></span></a><nav><a href="#top">Buscar</a><a href="#simulador">Simulador</a><a href="#extrato">Extrato</a><a href="#metodologia">Metodologia</a></nav><SourcesButton/></header>
     <main id="top">
-      <section className="hero"><div className="hero-copy"><span className="eyebrow"><Sparkles size={15}/> Transparência em todos os cargos</span><h1>Quanto custou.<br/><span>Quem recebeu.</span></h1><p>Busque uma figura política e explore salário de referência, despesas publicadas e o equivalente no simulador. Dinheiro público, conta por conta.</p>
+      <section className="hero"><div className="hero-copy"><span className="eyebrow"><Sparkles size={15}/> Transparência em todos os cargos</span><h1><span className="hero-title-lead">Quanto custa um</span><span className="hero-title-role" aria-live="polite" aria-atomic="true">{HERO_ROLES[heroRoleIndex]}</span></h1><p>Busque uma figura política e explore salário de referência, despesas publicadas e o equivalente no simulador. Dinheiro público, conta por conta.</p>
         <div className="search-area" onBlur={e=>{if(!e.currentTarget.contains(e.relatedTarget))setSuggestOpen(false)}}><form className="search-box" onSubmit={runSearch}><select className="role-filter" aria-label="Cargo" value={role} onChange={e=>{setRole(e.target.value);setSuggestOpen(false)}}>{ROLE_OPTIONS.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select><label className="search-input"><Search/><input value={query} onFocus={()=>setSuggestOpen(true)} onKeyDown={e=>{if(e.key==='Escape')setSuggestOpen(false)}} onChange={e=>{setQuery(e.target.value);setSuggestOpen(true)}} aria-expanded={suggestOpen&&query.trim().length>=2} aria-controls="name-suggestions" autoComplete="off" placeholder="Busque pelo nome" aria-label="Nome da figura política"/></label><input value={party} onChange={e=>setParty(e.target.value)} placeholder="Partido" aria-label="Partido"/><input value={state} onChange={e=>setState(e.target.value)} placeholder="UF" maxLength="2" aria-label="Estado"/><button className="primary-btn">Consultar <ArrowUpRight/></button></form>{suggestOpen&&query.trim().length>=2&&<div id="name-suggestions" className="name-suggestions" aria-label="Sugestões de figuras políticas">{suggestBusy?<Loading text="Buscando nomes…"/>:suggestions.length?suggestions.map(p=><button type="button" key={p.id} onClick={()=>chooseSuggestion(p)}><div className="avatar">{p.photo?<img src={p.photo} alt=""/>:p.name[0]}</div><span><strong>{p.name}</strong><small>{[p.roleLabel,p.party,p.state,p.city].filter(Boolean).join(' · ')}</small></span><ArrowUpRight size={16}/></button>):<p>Nenhum perfil encontrado com esses filtros.</p>}</div>}</div>
         <p className="source-line"><Info/> Fontes oficiais da Câmara, Senado, Executivo e STF. Cobertura indicada em cada perfil.</p></div>
         <RotatingReceipt/>
