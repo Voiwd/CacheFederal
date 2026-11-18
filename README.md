@@ -57,7 +57,7 @@ As fontes consultadas nesta versão são públicas e não exigem chave no fronte
 
 ## Critérios de interpretação
 
-O painel oferece bases separadas para o simulador: valores pessoais publicados, referência legal do cargo e contratos da amostra da gestão. A escolha altera o orçamento e os gráficos; os valores dessas bases não são somados. Quando não há remuneração publicada e existe uma referência legal confirmada, a referência aparece como base inicial, com indicação de estimativa. Reembolsos reais, como CEAPS, permanecem disponíveis em sua própria base.
+O painel inicia com salário tabelado + gastos individuais publicados. Se houver folha individual conciliada, ela substitui o salário da tabela. O seletor permite consultar isoladamente a tabela ou os registros publicados. Contratos institucionais não entram na conta pessoal nem aparecem como opção na interface.
 
 Referências remuneratórias usam o cronograma legal do ano e uma estimativa de 12 meses, conforme a metodologia da fonte. Não representam o contracheque do titular, pagamento recebido, ocupação durante todo o ano ou benefícios efetivamente utilizados. Limites de auxílio sem gasto confirmado não entram no orçamento. Referências e registros publicados são identificados separadamente no extrato e têm origem consultável. As referências podem aparecer antes da conclusão das consultas financeiras; se uma fonte financeira falhar, a referência disponível continua visível.
 
@@ -68,3 +68,37 @@ Referências remuneratórias usam o cronograma legal do ano e uma estimativa de 
 - Patrimônio: bens declarados em eleições pertencem a uma categoria distinta; não são despesas públicas.
 
 Comparações devem respeitar período e cobertura equivalentes. Totais parciais não devem ser tratados como custos completos. Contratos publicados, valores empenhados e despesas pagas são medidas diferentes e não devem ser somados indistintamente.
+
+### Composição do total e fotos
+
+A opção inicial soma salário-base do cargo, auxílios e gastos extras publicados. A folha publicada substitui o salário tabelado para impedir duplicidade. Limites condicionais de benefícios não são somados. Contratos da gestão não entram na conta pessoal. Valores ausentes permanecem indisponíveis; o total pode ser parcial. As regras e fontes do perfil e os preços do simulador ficam no botão “Dados públicos”.
+
+`python scripts/refresh-profile-photos.py` associa fotos do TSE pelo identificador exato da candidatura. Fotos de governadores são armazenadas localmente; prefeitos usam os endereços documentados pelo TSE. Ministros com correspondência única de nome completo no cadastro eleitoral recebem a foto da candidatura, com crédito e origem. As fotos são preservadas pela atualização do diretório.
+
+### Fontes conciliadas e escopo da busca
+
+A busca pública exclui prefeitos e governadores, inclusive nas sugestões e na rota de pesquisa. Os arquivos históricos desses cargos são mantidos apenas para não destruir o material de origem.
+
+Senado: a API `senadores/{codigo}/recursos-utilizados?ano=2025` acrescenta despesas fora da cota somente quando identidade, ano, UF, categorias e ambos os totais conferem. O total da cota também precisa ser idêntico à soma, em centavos, dos lançamentos CEAPS. Falhas rejeitam o bloco inteiro, sem preencher lacunas com zero. Contagens de pessoal e uso de imóvel não recebem valor fictício.
+
+STF: `python scripts/refresh-stf-payroll.py` consulta a exportação oficial mensal e gera `worker/stf-payroll.js`. A importação de 2025 exige 12 meses de remuneração e equipe por lotação exata. Soma todas as parcelas publicadas, usa valores brutos em centavos, exclui o ministro da equipe e rejeita valores ausentes, linhas idênticas duplicadas e lotações ambíguas. O arquivo contém somente agregados; nomes e matrículas de funcionários não são persistidos. Oito perfis passaram; Edson Fachin e Gilmar Mendes não recebem totais parciais dessa fonte. A conta abrange a folha publicada pelo STF, sem despesas comuns do Tribunal. A folha substitui a tabela salarial.
+
+Senado e STF oferecem 2025 no seletor enquanto essa é a cobertura validada, evitando misturar salário anual com gastos de um ano em andamento. Presidente e ministros usam os exercícios conciliados de SIAPE e SCDP descritos abaixo. As amostras de contratos federais foram retiradas dessas consultas.
+
+Validação adicional do importador: `python scripts/test_stf_payroll.py`.
+
+### Executivo federal: folha e viagens
+
+`python scripts/refresh-federal-costs.py --year 2025` importa os 12 ZIPs mensais SIAPE e o ZIP anual SCDP do Portal da Transparência. Não precisa de chave da API: os arquivos oficiais contêm os registros em lote. Gera `worker/federal-costs.js`, preservando os anos já importados. Os ZIPs e os registros intermediários ficam em `.data/federal/`, fora do Git; o site recebe somente os valores conciliados e as referências públicas, sem CPF ou matrícula. O seletor prioriza os anos validados de cada perfil.
+
+A identidade é conferida por nome completo, identificador SIAPE, cargo e mês. A remuneração só substitui a tabela se os 12 meses fecharem: salário bruto + abate-teto + 13º + férias + outros pagamentos, com reconciliação contra o líquido e os descontos publicados. Os auxílios/indenizações são conferidos contra a soma das parcelas e acrescentados uma vez. Folhas com múltiplos vínculos ou valores divergentes são rejeitadas integralmente; permanece a tabela quando o exercício anual do cargo foi confirmado.
+
+Viagens: o arquivo anual é lido por inteiro. Beneficiário por nome e CPF mascarado, confrontado com o cadastro do mês; cargo de presidente ou função ministerial CNE-0001; um registro por processo. Soma diárias, passagens e outros gastos, subtraindo devoluções. Passagens, trechos e pagamentos do mesmo ZIP não são somados de novo. Não há conversão de viagens ausentes em zero. Perfis sem confirmação do cargo nos 12 meses não recebem a conta anual nem salário anual inventado de ministro.
+
+O custo de cartões das unidades da Presidência não é pessoalmente atribuível nos arquivos agregados e fica fora do total, com fonte e explicação em Dados públicos. SCDP não representa todas as viagens presidenciais, voos da FAB ou comitivas. Folha SIAPE não cobre remunerações de origem externas ao sistema. O total representa as fontes integradas, não o custo completo da Presidência ou de um ministério. A coleta é um snapshot verificável, não atualização automática contínua.
+
+Testes: `python scripts/test_federal_costs.py` e `npm test`.
+
+Cobertura federal importada nesta versão: Lula/2025, Bolsonaro/2022, Temer/2018 e Dilma/2015, além de 13 ministros com exercício anual confirmado em 2025. Os arquivos históricos que bloquearam a coleta automática foram obtidos pelo formulário oficial no navegador e depois conciliados com os demais meses. Nenhum subtotal anual foi publicado. Anos anteriores a essa cobertura não recebem valores copiados de outros exercícios. Nos três ex-presidentes, não houve viagens individuais identificadas no SCDP; a ausência fica explícita, sem criar uma despesa de valor zero. O total de Temer respeita o abate-teto publicado na folha; aposentadorias e outros vínculos não são somados ao cargo presidencial.
+
+O importador reutiliza os arquivos locais para permitir retomada. Use `--refresh` para baixar novamente fontes que possam ter recebido ajustes; mudanças no conjunto de nomes invalidam o cache de seleção. Sem os 12 meses ou com falha de leitura, o ano publicado anteriormente é preservado.

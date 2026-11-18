@@ -1,3 +1,5 @@
+import {STF_PAYROLL} from './stf-payroll.js'
+import {FEDERAL_COSTS} from './federal-costs.js'
 import {ADDITIONAL_PROFILES,PROFILE_ENRICHMENTS} from './additional-profiles.js'
 import {PARLIAMENT_DIRECTORY} from './parliament-directory.js'
 import {getRoleReferenceCosts} from './reference-costs.js'
@@ -11,7 +13,8 @@ const PNCP = 'https://pncp.gov.br/api/consulta/v1/contratos'
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 const enrichProfile = profile => {
   const extra=PROFILE_ENRICHMENTS[profile.id] || PROFILE_ENRICHMENTS[profile.name] || PROFILE_ENRICHMENTS[fold(profile.name)] || {}
-  return {...profile,...extra}
+  const costYears=['president','minister'].includes(profile.role)?Object.entries(FEDERAL_COSTS.years).filter(([,data])=>data.profiles[profile.id]).map(([year])=>Number(year)).sort((a,b)=>b-a):undefined
+  return {...profile,...extra,...(costYears?{costYears}: {})}
 }
 const namedProfiles=()=>[...NAMED_DIRECTORY.profiles,...ADDITIONAL_PROFILES].map(enrichProfile)
 export function normalizeRole(value) {
@@ -38,6 +41,7 @@ export function normalizeCeaps(row) {
 }
 export async function searchExpansion(params) {
   const role = normalizeRole(params.get('role'))
+  if(['governor','mayor'].includes(role))return {data:[],total:0,notice:'Cargo fora da cobertura do site.'}
   const name = fold(params.get('name') || params.get('query'))
   const state = String(params.get('state') || '').toUpperCase()
   if (['governor','mayor','president','minister','justice'].includes(role)) {
@@ -54,13 +58,42 @@ export async function searchExpansion(params) {
   throw new Error('Cargo não reconhecido.')
 }
 const missing = (kind,label,sourceUrl,notice) => ({kind,label,value:null,status:'unavailable',sourceUrl,notice,rows:[]})
+// Reject the whole extra-expense block if either published total fails to reconcile.
+export function reconcileSenateResources(payload,profile,year,ceapsTotal){
+  if(payload?.statusCode!==200||!Array.isArray(payload.data)||payload.data.length!==1)throw new Error('Relatório de recursos inválido.')
+  const report=payload.data[0]
+  if(Number(report.ano)!==Number(year)||!profile.name||fold(report.parlamentar?.nome)!==fold(profile.name)||report.parlamentar?.estado!==profile.state)throw new Error('Relatório não corresponde ao senador e ano selecionados.')
+  const cents=n=>{if(typeof n!=='number'||!Number.isFinite(n))throw new Error('Relatório contém valor ausente ou inválido.');return Math.round(n*100)}
+  for(const block of [report.cotas,report.gastosNaoInclusos]){
+    if(!Array.isArray(block?.despesas)||!block.despesas.length||block.despesas.some(row=>typeof row.recurso!=='string'||!row.recurso.trim()))throw new Error('Categorias incompletas no relatório.')
+    if(block.despesas.reduce((sum,row)=>sum+cents(row.valor),0)!==cents(block.totalValor))throw new Error('Categorias não conferem com o total publicado.')
+  }
+  if(cents(report.cotas.totalValor)!==cents(ceapsTotal))throw new Error('Relatório e lançamentos CEAPS divergem. Gastos extras não somados.')
+  const sourceUrl=`https://adm.senado.gov.br/adm-dadosabertos/api/v1/senadores/${profile.externalId||profile.id.replace('senate-','')}/recursos-utilizados?ano=${year}`
+  return {kind:'extraExpenses',label:'Gastos fora da cota',value:report.gastosNaoInclusos.totalValor,status:'available',sourceUrl,
+    notice:'Categorias e total conferidos no relatório anual e cota conferida com os lançamentos CEAPS. Não repete a cota. Quantidades de funcionários e uso de moradia não são convertidos em valores.',
+    rows:report.gastosNaoInclusos.despesas.map((row,index)=>({id:`senate-extra-${year}-${index}`,date:null,category:row.recurso,value:row.valor,sourceUrl,description:`Total publicado em ${year}`}))}
+}
+
 export async function expansionCosts(profile,year) {
   const role = normalizeRole(profile.role)
   const components = [missing('remuneration','Remuneração',PORTAL,'Folha individual ainda não integrada. Não disponível não significa zero.'),missing('office','Estrutura e exercício do cargo',profile.officialUrl || PORTAL,'Cobertura de gabinete, benefícios e viagens ainda não integrada.')]
   if (profile.termStart && (year < Number(profile.termStart.slice(0,4)) || year > Number(profile.termEnd.slice(0,4)))) {
     return {components,year,sourceUrl:profile.officialUrl,notice:`Ano fora do mandato nominal da eleição consultada (${profile.termStart.slice(0,4)}–${profile.termEnd.slice(0,4)}). Não foram atribuídas despesas de outra gestão.`}
   }
-  if (role === 'justice' || role === 'deputy') return {components,year,sourceUrl:profile.officialUrl,notice:'Referências legais do cargo são exibidas em base separada; folha individual não integrada.'}
+  if(role==='justice'){
+    const payroll=year===STF_PAYROLL.year?STF_PAYROLL.profiles[profile.id]:null
+    if(payroll)return payroll
+    return {components,year,sourceUrl:'https://egesp-portal.stf.jus.br/transparencia/rendimento_folha',notice:'Folha individual não integrada para este perfil/ano: não foi possível validar os 12 meses de remuneração e a equipe com lotação individual inequívoca. Nenhum subtotal incompleto foi importado.'}
+  }
+  if(['president','minister'].includes(role)){
+    const annual=FEDERAL_COSTS.years[year]
+    const published=annual?.profiles[profile.id]
+    if(published)return published
+    const failure=FEDERAL_COSTS.sourceFailures?.[year]
+    return {components,year,sourceUrl:failure?.sourceUrl||PORTAL,notice:annual?.excludedProfiles[profile.id] || failure?.notice || 'Não há uma conta individual anual conciliada para este perfil e ano. Folhas e viagens federais só entram após conferência de identidade, cargo e período. Despesas do órgão não são atribuídas à pessoa.'}
+  }
+  if (role === 'deputy') return {components,year,sourceUrl:profile.officialUrl,notice:'Referências legais do cargo são exibidas em base separada; folha individual não integrada.'}
   if (role === 'senator') {
     components[0].sourceUrl='https://www25.senado.leg.br/web/transparencia/sen'
     const id = String(profile.externalId || profile.id?.replace('senate-',''))
@@ -72,6 +105,12 @@ export async function expansionCosts(profile,year) {
       const rows = all.filter(r=>String(r.codSenador)===id).map(normalizeCeaps)
       const valid = rows.length>0 && rows.every(r=>r.value!==null)
       components[1] = {kind:'office',label:'Reembolsos CEAPS',value:valid?rows.reduce((n,r)=>n+Math.round(r.value*100),0)/100:null,status:valid?'available':'unavailable',sourceUrl,rows,notice:rows.length?'Somente reembolsos CEAPS; não inclui toda a estrutura ou a remuneração.':'Nenhum registro retornado para o senador/ano. Cobertura não confirmada; total não disponível.'}
+      if(valid){
+        const resourceUrl=`https://adm.senado.gov.br/adm-dadosabertos/api/v1/senadores/${id}/recursos-utilizados?ano=${year}`
+        try{components.push(reconcileSenateResources(await expansionJson(resourceUrl),profile,year,components[1].value))}
+        catch(error){components.push(missing('extraExpenses','Gastos fora da cota',resourceUrl,error.message))}
+      }
+
     } catch(e) { components[1] = missing('office','Reembolsos CEAPS',sourceUrl,e.message) }
   } else if (role === 'governor' || role === 'mayor') {
     const uf = String(profile.state || '').toUpperCase()
@@ -86,24 +125,9 @@ export async function expansionCosts(profile,year) {
       components.push({kind:'administration',label:'Contratos publicados no PNCP',value:null,status:rows.length?'partial':'unavailable',rows,sourceUrl,notice:`Amostra da primeira página (até 50 registros). Valores contratados, não pagamentos; não são atribuídos pessoalmente ao governante. ${result.totalPaginas || '?'} página(s) na fonte. Sem total consolidado.`})
     } catch(e) {components.push(missing('administration','Contratos publicados no PNCP',sourceUrl,e.message))}
   } else {
-    components.push(missing('administration','Despesas da gestão',PORTAL,'Consulta de despesas institucionais disponível na fonte oficial. Integração individual de presidente e ministros pendente; não há valores consolidados nesta tela.'))
-    if(role==='president') components[1]=missing('office','Cartão de pagamento da Presidência','https://www.gov.br/casacivil/pt-br/acesso-a-informacao/informacoes-classificadas/despesas-com-cartao-de-pagamento','Arquivos oficiais disponíveis na Casa Civil. Importação e atribuição dos lançamentos ainda não integradas.')
-    const id=String(profile.externalId||profile.id?.replace('siorg-',''))
-    if(!/^\d+$/.test(id)) return {components,year,sourceUrl:profile.officialUrl,notice:'Titular identificado na fonte oficial; órgão SIORG sem correspondência confirmada. Custos indisponíveis.'}
-    const structureUrl=`https://api.siorg.gov.br/doc/unidade-organizacional/${id}/completa`
-    const structure=await expansionJson(structureUrl)
-    const unit=structure.unidade
-    if(!unit || (profile.institutionalName ? fold(unit.nome)!==fold(profile.institutionalName) : (role==='president'?fold(unit.nome)!=='presidencia da republica':!fold(unit.nome).startsWith('ministerio ')))) throw new Error('Órgão incompatível com o cargo selecionado.')
-    components[1].notice += ` Órgão: ${unit.nome}. ${unit.autoridade?.denominacao?.descricao||''}. Competências e estrutura disponíveis no registro SIORG.`
-    if(role!=='president') components[1].sourceUrl=structureUrl
-    const query=new URLSearchParams({dataInicial:`${year}0101`,dataFinal:`${year}1231`,pagina:'1',tamanhoPagina:'50',poderId:'E',esferaId:'F'})
-    const sourceUrl=`${PNCP}?${query}`
-    try {
-      const result=await expansionJson(sourceUrl)
-      const rows=(result.data||[]).filter(r=>r.orgaoEntidade?.poderId==='E'&&r.orgaoEntidade?.esferaId==='F'&&fold(r.orgaoEntidade?.razaoSocial)===fold(unit.nome)).map(r=>({id:r.numeroControlePNCP,date:r.dataAssinatura,category:'Contrato público federal',supplier:r.nomeRazaoSocialFornecedor,value:Number.isFinite(r.valorInicial)?r.valorInicial:null,description:r.objetoContrato,sourceUrl:`https://pncp.gov.br/app/contratos/${r.orgaoEntidade?.cnpj}/${r.anoContrato}/${r.sequencialContrato}`}))
-      components[2]={kind:'administration',label:'Contratos publicados no PNCP',value:null,status:rows.length?'partial':'unavailable',rows,sourceUrl,notice:'Amostra da primeira página federal (até 50 registros), filtrada pelo nome exato do órgão no SIORG. Ausência na amostra não significa ausência de contratos. Valores contratados não são pagamentos nem gastos pessoais. Sem total consolidado.'}
-    } catch(e) {components[2]=missing('administration','Contratos publicados no PNCP',sourceUrl,e.message)}
+    return {components,sourceUrl:PORTAL,year,fetchedAt:new Date().toISOString(),notice:'Somente salário tabelado: a folha federal e os gastos individuais ainda não foram conciliados. Amostras de contratos institucionais não entram na conta da pessoa.'}
   }
+
   return {components,sourceUrl:components.find(c=>c.rows?.length)?.sourceUrl || profile.officialUrl || PORTAL,notice:`${profile.sourceNotice||''} Valores pessoais, exercício do cargo e gestão permanecem separados. Contratos são vinculados ao órgão/território, sem prova de autoria pessoal ou permanência no cargo. Dados ausentes não entram em totais.`,year,fetchedAt:new Date().toISOString()}
 }
 const invalidExpansion = message => Object.assign(new Error(message), {status:400})
@@ -150,7 +174,8 @@ export async function expansionResponse(request) {
       let input
       try { input=JSON.parse(url.searchParams.get('profile')||'null') } catch { throw invalidExpansion('Perfil inválido.') }
       const profile=await canonicalExpansionProfile(input)
-      result=url.pathname.endsWith('/references')?getRoleReferenceCosts(profile,year):await expansionCosts(profile,year)
+      const excluded=profile.role==='minister'&&FEDERAL_COSTS.years[year]?.excludedProfiles[profile.id]?.startsWith('O cadastro mensal')
+      result=url.pathname.endsWith('/references')?(excluded?{components:[],year,referenceTotal:null,notice:FEDERAL_COSTS.years[year].excludedProfiles[profile.id]}:getRoleReferenceCosts(profile,year)):await expansionCosts(profile,year)
     } else return Response.json({error:'Rota não encontrada.'},{status:404})
     return Response.json(result,{headers:{'Cache-Control':'public, max-age=300'}})
   } catch(e) {return Response.json({error:e.message || 'Fonte oficial indisponível.'},{status:e.status || 502})}

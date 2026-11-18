@@ -52,7 +52,7 @@ function housingReference(role,year) {
   const monthlyLimit=role==='senator'?5500:4253
   const sourceUrl=ROLE_REFERENCE_SOURCES[role==='senator'?'senatorHousing':'deputyHousing']
   const notice=role==='senator'?'Limite mensal, condicionado à ausência de imóvel funcional e comprovação de aluguel/hotel. Não comprova adesão ou recebimento pelo senador.':'Valor mensal de referência para quem não ocupa imóvel funcional; modalidade e requisitos devem ser conferidos na fonte. Não comprova recebimento pelo deputado. Complemento com CEAP não é somado.'
-  return {kind:'reference:allowances',label:'Auxílio-moradia — limite condicionado',value:null,monthlyLimit,status:'reference',basis:'eligibility-limit',isEstimate:true,isPaid:false,includeInPersonalTotal:false,includeInReferenceTotal:false,sourceUrl,notice,rows:[{id:`housing-limit-${role}-${year}`,kind:'reference:allowances',date:null,value:null,monthlyLimit,description:notice,category:'Limite de benefício — não é pagamento',sourceUrl,basis:'eligibility-limit',isEstimate:true,isPaid:false}]}
+  return {kind:'reference:allowances',label:'Auxílio-moradia (limite mensal)',value:null,monthlyLimit,status:'reference',basis:'eligibility-limit',isEstimate:true,isPaid:false,includeInPersonalTotal:false,includeInReferenceTotal:false,sourceUrl,notice,rows:[{id:`housing-limit-${role}-${year}`,kind:'reference:allowances',date:null,value:null,monthlyLimit,description:notice,category:'Limite de benefício — não é pagamento',sourceUrl,basis:'eligibility-limit',isEstimate:true,isPaid:false}]}
 }
 
 /** Returns a separate simulation basis. Callers must never merge it into paid totals. */
@@ -69,10 +69,10 @@ export function getRoleReferenceCosts(profile={},year) {
     const date=`${year}-${String(month).padStart(2,'0')}-01`
     const rate=rates.filter(r=>r.from<=date).at(-1)
     if(!rate) return empty('Tabela incompleta para o ano; total de referência não calculado.')
-    rows.push({id:`legal-subsidy-${role}-${date}`,date,year,month,value:rate.monthly,kind:'reference:remuneration',category:'Subsídio legal de referência',description:`Parcela mensal bruta de referência do cargo — ${rate.norm}`,sourceUrl:rate.sourceUrl,validFrom:rate.from,norm:rate.norm,basis:'legal-reference',isEstimate:true,isPaid:false})
+    rows.push({id:`legal-subsidy-${role}-${date}`,date,year,month,value:rate.monthly,kind:'reference:remuneration',category:'Salário-base',description:`Parcela mensal bruta de referência do cargo — ${rate.norm}`,sourceUrl:rate.sourceUrl,validFrom:rate.from,norm:rate.norm,basis:'legal-reference',isEstimate:true,isPaid:false})
   }
   const value=rows.reduce((sum,r)=>sum+Math.round(r.value*100),0)/100
-  const component={kind:'reference:remuneration',label:'Subsídio legal — referência para 12 meses',value,monthlyValue:rows.at(-1).value,status:'reference',basis:'legal-reference',isEstimate:true,isPaid:false,includeInPersonalTotal:false,includeInReferenceTotal:true,sourceUrl:rows.at(-1).sourceUrl,notice:baseNotice,rows,period:{start:`${year}-01-01`,end:`${year}-12-31`,months:12},salarySchedule:rates.filter(r=>r.from<=`${year}-12-31`)}
+  const component={kind:'reference:remuneration',label:'Salário-base do cargo',value,monthlyValue:rows.at(-1).value,status:'reference',basis:'legal-reference',isEstimate:true,isPaid:false,includeInPersonalTotal:false,includeInReferenceTotal:true,sourceUrl:rows.at(-1).sourceUrl,notice:baseNotice,rows,period:{start:`${year}-01-01`,end:`${year}-12-31`,months:12},salarySchedule:rates.filter(r=>r.from<=`${year}-12-31`)}
   const housing=housingReference(role,year)
   return {components:[component,...(housing?[housing]:[])],referenceTotal:value,monthlyReference:component.monthlyValue,year,isEstimate:true,isPaid:false,basis:'legal-reference',sourceUrl:component.sourceUrl,verifiedAt:CHECKED_AT,notice:baseNotice}
 }

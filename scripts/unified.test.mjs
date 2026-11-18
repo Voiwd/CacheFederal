@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {adaptExpandedCosts,normalizeUnifiedProfile,searchUnifiedPoliticians,searchDeputySnapshot,rankUnifiedProfiles,selectSimulationBasis,getUnifiedExpenses} from '../src/lib/unified.js'
+import {adaptExpandedCosts,normalizeUnifiedProfile,searchUnifiedPoliticians,searchDeputySnapshot,rankUnifiedProfiles,selectSimulationBasis,getUnifiedExpenses,getAvailableYears,getCoverageStatus} from '../src/lib/unified.js'
 
 test('published CEAPS zero remains zero while unavailable CEAPS cannot become a simulation budget',()=>{
   const profile={role:'senator',scope:'person'}
@@ -19,7 +19,7 @@ test('administration simulation uses only finite contract sample amounts and nev
     {kind:'office',value:500,rows:[{id:'office',value:500}]},
     {kind:'administration',value:999999,status:'partial',rows:[{id:'a',value:100.10},{id:'a',value:100.10},{id:'b',value:20.05},{id:'unknown',value:null},{id:'infinite',value:Infinity}]},
   ]},2025)
-  assert.equal(adapted.selectedSimulationBasis,'personalPublished')
+  assert.equal(adapted.selectedSimulationBasis,'combined')
   assert.equal(adapted.simulationBudget,2500)
   const result=selectSimulationBasis(adapted,'administration')
   assert.equal(result.simulationBudget,120.15)
@@ -51,7 +51,7 @@ test('CEAPS uses published aggregate and retains credit rows without adding mana
   ]},2025)
   assert.equal(result.simulationBudget,80.05)
   assert.equal(result.data.find(r=>r.id==='b').netValue,-20.05)
-  assert.equal(result.unitType,'reimbursements')
+  assert.equal(result.unitType,'combined')
 })
 
 test('normalization preserves elected identity, office and historical mandate metadata',()=>{
@@ -81,8 +81,8 @@ test('one nominal query spans all offices and retains available sources when one
   }
   try {
     const result=await searchUnifiedPoliticians({name:'Ana',role:'all'})
-    assert.deepEqual(requested.sort(),['deputy','governor','justice','mayor','minister','president','senator'])
-    assert.equal(result.data.length,6)
+    assert.deepEqual(requested.sort(),['deputy','justice','minister','president','senator'])
+    assert.equal(result.data.length,4)
     assert.equal(result.partial,true)
     assert.equal(result.sourceMode,'official')
     assert.ok(result.data.every(profile=>profile.name.startsWith('Ana')))
@@ -90,19 +90,19 @@ test('one nominal query spans all offices and retains available sources when one
   } finally {globalThis.fetch=original}
 })
 
-test('legal references, CEAPS and contracts remain separately selectable and never inflate each other',()=>{
+test('default combines salary and CEAPS while contracts and isolated bases remain selectable',()=>{
   const result=adaptExpandedCosts({role:'senator'},{components:[
     {kind:'office',value:100,status:'available',rows:[{id:'ceaps',value:100}]},
     {kind:'reference:remuneration',value:1200,status:'reference',rows:[{id:'salary-reference',value:1200}]},
     {kind:'reference:allowances',value:null,status:'reference',rows:[{id:'allowance-limit',value:null,monthlyLimit:100}]},
     {kind:'administration',value:null,rows:[{id:'contract',value:5000}]},
   ]},2025)
-  assert.equal(result.selectedSimulationBasis,'reference')
-  assert.equal(result.simulationBudget,1200)
-  assert.equal(result.unitType,'reference')
+  assert.equal(result.selectedSimulationBasis,'combined')
+  assert.equal(result.simulationBudget,1300)
+  assert.equal(result.unitType,'combined')
   assert.equal(result.data.find(r=>r.id==='salary-reference').sourceMode,'reference')
   assert.equal(result.data.find(r=>r.id==='salary-reference').basisId,'reference')
-  assert.equal(result.byCategory.reduce((s,r)=>s+r.value,0),1200)
+  assert.equal(result.byCategory.reduce((s,r)=>s+r.value,0),1300)
   assert.equal(selectSimulationBasis(result,'personalPublished').simulationBudget,100)
   assert.equal(selectSimulationBasis(result,'administration').simulationBudget,5000)
   assert.equal(selectSimulationBasis(result,'missing'),result)
@@ -130,7 +130,7 @@ test('references reach the dashboard before slow published data and survive its 
   } finally {releasePublished();globalThis.fetch=original}
 })
 
-test('deputy CEAP progress and final result preserve separately selected salary reference',async()=>{
+test('deputy progress adds CEAP to salary and preserves isolated bases',async()=>{
   const original=globalThis.fetch,progress=[]
   globalThis.fetch=async address=>{
     const url=new URL(String(address),'https://app.test')
@@ -139,10 +139,10 @@ test('deputy CEAP progress and final result preserve separately selected salary 
   }
   try {
     const result=await getUnifiedExpenses({id:123,role:'deputy'},2025,{onProgress:value=>progress.push(value)})
-    assert.equal(result.simulationBudget,1200)
+    assert.equal(result.simulationBudget,1267)
     assert.equal(selectSimulationBasis(result,'personalPublished').simulationBudget,67)
     assert.ok(progress.length)
-    assert.ok(progress.every(value=>value.simulationBudget===1200&&value.simulationBases.some(b=>b.id==='reference')))
+    assert.ok(progress.every(value=>value.simulationBudget>=1200&&value.simulationBases.some(b=>b.id==='reference')))
     assert.equal(result.data.filter(row=>row.basisId==='personalPublished').length,67)
     assert.equal(result.data.filter(row=>row.basisId==='reference').length,1)
   }finally{globalThis.fetch=original}
@@ -168,4 +168,43 @@ test('official deputy snapshot filters name party and state and preserves collec
 test('ranking prioritizes exact names and gives different offices visibility among equal matches',()=>{
   const profiles=[{id:1,name:'Ana Clara',role:'deputy'},{id:2,name:'Ana Maria',role:'deputy'},{id:3,name:'Ana Silva',role:'mayor'},{id:4,name:'Ana',role:'senator'}]
   assert.deepEqual(rankUnifiedProfiles(profiles,'ana').map(p=>p.id),[4,1,3,2])
+})
+
+ test('published salary replaces the table, extras and credits add once, conditional caps stay out',()=>{
+ const profile={role:'deputy'}
+ const components=[
+ {kind:'reference:remuneration',value:1200,status:'reference',rows:[{id:'table',value:1200}]},
+ {kind:'reference:allowances',value:null,monthlyLimit:500,status:'reference'},
+ {kind:'remuneration',value:1100,rows:[{id:'salary',value:1100}]},
+ {kind:'allowances',value:50,rows:[{id:'housing',value:50}]},
+ {kind:'office',value:80,rows:[{id:'expense',value:100},{id:'credit',value:-20}]},
+ {kind:'cabinet',value:200,rows:[{id:'staff',value:200}]},
+ {kind:'administration',value:9000,rows:[{id:'contract',value:9000}]},
+ ]
+ const result=adaptExpandedCosts(profile,{components},2025)
+ assert.equal(result.simulationBudget,1430)
+ assert.equal(result.byCategory.reduce((s,r)=>s+r.value,0),1430)
+ assert.equal(selectSimulationBasis(result,'reference').simulationBudget,1200)
+ assert.equal(selectSimulationBasis(result,'administration').simulationBudget,9000)
+ assert.equal(adaptExpandedCosts(profile,{components:components.filter(c=>c.kind!=='remuneration')},2025).simulationBudget,1530)
+ })
+
+ test('deputy periods follow available expense files and never invent 2019-2022 coverage',()=>{
+ assert.deepEqual(getAvailableYears({id:220645,role:'deputy'},{2025:['220645'],2026:['220645']}),[2026,2025])
+ assert.deepEqual(getAvailableYears({id:9,role:'deputy'},{2025:[],2026:['9']}),[2026])
+ assert.deepEqual(getAvailableYears({role:'mayor',termStart:'2025-01-01',termEnd:'2028-12-31'}),[2026,2025])
+ })
+ test('coverage distinguishes loading, table-only, zero published and completely missing data',()=>{
+ const table={kind:'reference:remuneration',value:100,status:'reference'}
+ assert.equal(getCoverageStatus({publishedPending:true,components:[table]}).kind,'loading')
+ assert.equal(getCoverageStatus({components:[table]}).kind,'table-only')
+ assert.equal(getCoverageStatus({components:[{kind:'office',value:0,status:'available'}]}).kind,'published')
+ assert.equal(getCoverageStatus({components:[{kind:'remuneration',value:null,status:'unavailable'}]}).kind,'unavailable')
+ assert.equal(getCoverageStatus({components:[{kind:'administration',rows:[{value:10}]}]}).kind,'contracts-only')
+ })
+
+test('local offices are excluded without contacting any upstream source',async()=>{
+ const original=globalThis.fetch
+ globalThis.fetch=async()=>{throw new Error('Must not fetch removed offices')}
+ try{for(const role of ['governor','mayor'])assert.deepEqual((await searchUnifiedPoliticians({role})).data,[])}finally{globalThis.fetch=original}
 })

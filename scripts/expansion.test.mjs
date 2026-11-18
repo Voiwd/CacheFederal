@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import {normalizeCeaps, expansionCosts, expansionResponse,searchExpansion} from '../worker/expansion.js'
+import {normalizeCeaps, expansionCosts, expansionResponse,searchExpansion,reconcileSenateResources} from '../worker/expansion.js'
 import {NAMED_DIRECTORY} from '../worker/political-profiles.js'
 
 test('nominal official directory finds each executive office and retains temporal provenance',async()=>{
-  for(const [role,name] of [['president','Lula'],['minister','Miriam'],['governor','Tarcisio'],['mayor','Ricardo Nunes']]) {
+  for(const [role,name] of [['president','Lula'],['minister','Miriam']]) {
     const result=await searchExpansion(new URLSearchParams({role,name}))
     assert.ok(result.data.length,`${role}: ${name}`)
     assert.ok(result.data.every(p=>p.role===role&&p.sourceMode==='official'&&p.sourceNotice&&p.sourceDate&&p.officialUrl.startsWith('https://')))
@@ -100,28 +100,34 @@ test('cost route resolves profiles against official identities and ignores calle
   } finally {globalThis.fetch=original}
 })
 
-test('nominal minister directory resolves SIORG detail and restricts contracts to the executive agency',async()=>{
-  const original=globalThis.fetch
-  const named=NAMED_DIRECTORY.profiles.find(p=>p.role==='minister'&&p.externalId)
-  assert.ok(named,'Official minister snapshot must contain a confirmed SIORG mapping')
-  globalThis.fetch=async url=>{
-    const address=String(url)
-    if(address.endsWith(`/${named.externalId}/completa`)) return Response.json({unidade:{nome:named.institutionalName,autoridade:{denominacao:{descricao:'Ministro'}}}})
-    assert.match(address,/pncp\.gov\.br/)
-    const contract=(id,name,power)=>({numeroControlePNCP:id,orgaoEntidade:{razaoSocial:name,esferaId:'F',poderId:power,cnpj:'123'},valorInicial:250,anoContrato:2022,sequencialContrato:1})
-    return Response.json({data:[contract('correct',named.institutionalName,'E'),contract('other-agency','Outro Ministério','E'),contract('legislative',named.institutionalName,'L')]})
-  }
-  try {
-    const search=await expansionResponse(new Request(`https://app.test/api/expansion/search?${new URLSearchParams({role:'minister',name:named.name})}`))
-    const profile=(await search.json()).data.find(p=>p.id===named.id)
-    assert.equal(profile.name,named.name)
-    assert.equal(profile.scope,'administration')
-    const response=await expansionResponse(new Request(`https://app.test/api/expansion/costs?${new URLSearchParams({profile:JSON.stringify(profile),year:'2022'})}`))
-    assert.equal(response.status,200,await response.clone().text())
-    const components=(await response.json()).components
-    assert.equal(components.find(c=>c.kind==='remuneration').value,null)
-    const administration=components.find(c=>c.kind==='administration')
-    assert.deepEqual(administration.rows.map(r=>r.id),['correct'])
-    assert.equal(administration.value,null)
-  } finally {globalThis.fetch=original}
+test('executive profiles never substitute arbitrary contract samples for personal costs',async()=>{
+ const original=globalThis.fetch
+ globalThis.fetch=async()=>{throw new Error('Incomplete institutional sources must not be queried')}
+ try{
+ const profile=NAMED_DIRECTORY.profiles.find(p=>p.role==='minister')
+ const result=await expansionCosts(profile,2025)
+ assert.ok(result.components.every(c=>c.value===null&&c.rows.length===0))
+ assert.match(result.notice,/cadastro mensal não confirma/)
+ }finally{globalThis.fetch=original}
+})
+
+test('removed local offices never appear in public searches',async()=>{
+ for(const role of ['governor','mayor']){
+  const result=await searchExpansion(new URLSearchParams({role}))
+  assert.deepEqual(result.data,[])
+ }
+})
+
+const senateProfile={id:'senate-742',externalId:'742',name:'Marcelo Castro',state:'PI'}
+const senateReport=()=>({statusCode:200,data:[{ano:2025,parlamentar:{nome:'Marcelo Castro',estado:'PI'},cotas:{despesas:[{recurso:'Cota',valor:100}],totalValor:100},gastosNaoInclusos:{despesas:[{recurso:'Correios',valor:30},{recurso:'Estorno',valor:-5}],totalValor:25}}]})
+test('senate extra expenses reconcile both blocks without repeating CEAPS',()=>{
+ const component=reconcileSenateResources(senateReport(),senateProfile,2025,100)
+ assert.equal(component.value,25)
+ assert.equal(component.rows.reduce((sum,row)=>sum+row.value,0),25)
+ assert.equal(component.rows.length,2)
+})
+test('inconsistent or incomplete senate blocks are rejected in full',()=>{
+ const mutations=[r=>r.data[0].gastosNaoInclusos.totalValor=26,r=>r.data[0].gastosNaoInclusos.despesas[0].valor=null,r=>r.data[0].ano=2024,r=>r.data[0].parlamentar.nome='Outra pessoa',r=>r.data[0].cotas.totalValor=99,r=>r.data[0].gastosNaoInclusos.despesas=[]]
+ for(const mutate of mutations){const r=senateReport();mutate(r);assert.throws(()=>reconcileSenateResources(r,senateProfile,2025,100))}
+ assert.throws(()=>reconcileSenateResources(senateReport(),senateProfile,2025,101))
 })

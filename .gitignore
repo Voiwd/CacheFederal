@@ -157,3 +157,7 @@ vite.config.ts.timestamp-*
 .nx/migrate-runs
 
 # Reproducible official data snapshots (tracked intentionally)
+
+# Large federal source archives and personal reconciliation intermediates.
+.data/federal/
+__pycache__/

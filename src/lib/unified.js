@@ -4,7 +4,7 @@ import { searchExpandedProfiles, getExpandedCosts, getRoleReferences } from './e
 export const UNIFIED_ROLES = [
   {id:'all',label:'Todos os cargos'}, {id:'deputy',label:'Deputados federais'},
   {id:'senator',label:'Senadores'}, {id:'president',label:'Presidente'},
-  {id:'minister',label:'Ministros'}, {id:'governor',label:'Governadores'}, {id:'mayor',label:'Prefeitos'}, {id:'justice',label:'Ministros do STF'},
+  {id:'minister',label:'Ministros'}, {id:'justice',label:'Ministros do STF'},
 ]
 const roleLabels = {deputy:'Deputado(a) federal',senator:'Senador(a)',president:'Presidente',minister:'Ministro(a)',governor:'Governador(a)',mayor:'Prefeito(a)',justice:'Ministro(a) do STF'}
 const institutions = {deputy:'Câmara dos Deputados',senator:'Senado Federal',president:'Executivo federal',minister:'Executivo federal',governor:'Executivo estadual',mayor:'Executivo municipal',justice:'Supremo Tribunal Federal'}
@@ -30,7 +30,7 @@ export async function searchDeputySnapshot(filters={},options={}) {
 
 export function normalizeUnifiedProfile(profile, fallbackRole='deputy') {
   const role = profile.role || fallbackRole
-  const mandateLabel=profile.mandateLabel || (profile.termStart&&profile.termEnd?`Mandato ${profile.termStart}–${profile.termEnd}`:profile.sourceDate?`Fonte consultada em ${profile.sourceDate}`:profile.electionYear?`Eleição ${profile.electionYear}`:'')
+  const mandateLabel=profile.mandateLabel || (profile.termStart&&profile.termEnd?`Mandato ${profile.termStart}–${profile.termEnd}`:profile.electionYear?`Eleição ${profile.electionYear}`:'')
   return {...profile,role,roleLabel:profile.roleLabel || (role==='president'&&profile.historical?'Ex-presidente':roleLabels[role] || role),institution:profile.institutionalName || profile.institution || institutions[role],mandateLabel,scope:profile.scope || 'person'}
 }
 
@@ -48,6 +48,7 @@ export function rankUnifiedProfiles(profiles,query='') {
 
 export async function searchUnifiedPoliticians(filters={},options={}) {
   const role = filters.role || 'all'
+  if(['governor','mayor'].includes(role))return {data:[],sourceMode:'official',notice:'Cargo fora da cobertura do site.',partial:false}
   const roles = role==='all' ? UNIFIED_ROLES.filter(r=>r.id!=='all').map(r=>r.id) : [role]
   const results = await Promise.allSettled(roles.map(async current=>{
     const timeout=AbortSignal.timeout(8000)
@@ -75,7 +76,7 @@ export function selectSimulationBasis(expenses,basisId) {
   const coverageNotice=[expenses.baseCoverageNotice,basis.notice].filter(Boolean).join(' ')
   return {...expenses,byCategory:stats.byCategory,bySupplier:stats.bySupplier,debits:stats.debits,credits:stats.credits,
     total:basis.budget,simulationBudget:basis.budget,simulationLabel:basis.label,simulationNotice:basis.notice,
-    selectedSimulationBasis:basis.id,unitType:basis.unitType,complete:basis.id==='personalPublished'&&expenses.personalPublishedComplete===true,coverageNotice,notice:coverageNotice}
+    selectedSimulationBasis:basis.id,unitType:basis.unitType,complete:basis.id==='combined'?expenses.verifiedMonths?.length===12:basis.id==='personalPublished'&&expenses.personalPublishedComplete===true,coverageNotice,notice:coverageNotice}
 }
 
 export function adaptExpandedCosts(profile,costs,year) {
@@ -100,20 +101,27 @@ export function adaptExpandedCosts(profile,costs,year) {
   const coverageNotice=[costs.notice,...components.map(c=>c.notice),rows.some(r=>!finite(r.netValue))?'Registros sem valor informado não entram no subtotal.':''].filter(Boolean).join(' ')
   const simulationRows=validRows.filter(row=>row.componentKind===(administration?'administration':'office'))
   const referenceComponents=components.filter(c=>c.kind?.startsWith('reference:')||c.status==='reference')
-  const knownReferences=referenceComponents.filter(c=>finite(c.value))
-  const personalComponents=components.filter(c=>!referenceComponents.includes(c)&&['office','remuneration','allowances','indemnities','dailyAllowances'].includes(c.kind)&&finite(c.value))
+  const knownReferences=referenceComponents.filter(c=>finite(c.value)&&c.includeInReferenceTotal!==false)
+  const personalComponents=components.filter(c=>!referenceComponents.includes(c)&&['office','remuneration','allowances','indemnities','dailyAllowances','cabinet','extraExpenses'].includes(c.kind)&&finite(c.value))
   const personalBudget=personalComponents.length?personalComponents.reduce((value,c)=>value+Math.round(c.value*100),0)/100:null
   const referenceBudget=knownReferences.length?knownReferences.reduce((value,c)=>value+Math.round(c.value*100),0)/100:null
+  // Published payroll replaces the salary table; conditional caps are never payments.
+  const hasSalary=personalComponents.some(c=>c.kind==='remuneration')
+  const baseComponents=knownReferences.filter(c=>!(hasSalary&&c.kind==='reference:remuneration') && !(c.kind==='reference:allowances'&&personalComponents.some(p=>p.kind==='allowances')))
+  const combinedComponents=[...baseComponents,...personalComponents]
+  const combinedBudget=combinedComponents.length?combinedComponents.reduce((total,c)=>total+Math.round(c.value*100),0)/100:null
+  const combinedKinds=new Set(combinedComponents.map(c=>c.kind))
+  const combinedRows=validRows.filter(r=>combinedKinds.has(r.componentKind)&&r.componentKind!=='administration')
   const simulationBases=[
+    {id:'combined',label:'Salário + auxílios + gastos extras',budget:combinedBudget,unitType:'combined',rows:combinedRows,notice:'Salário da tabela quando a folha não está disponível, mais auxílios e despesas publicados. Limites de benefícios não são somados. Contratos da gestão ficam separados. O total pode estar incompleto e não representa dinheiro recebido pela pessoa.'},
     {id:'personalPublished',label:administration||personalComponents.some(c=>c.kind==='remuneration')?'Valores pessoais publicados':profile.role==='deputy'?'Despesas CEAP publicadas':'Reembolsos CEAPS publicados',budget:personalBudget,unitType:'reimbursements',rows:validRows.filter(r=>r.basisId==='personalPublished'),notice:'Somente valores publicados vinculados à pessoa ou ao exercício do cargo; não inclui referências legais nem contratos da gestão.'},
-    {id:'reference',label:'Referência legal do cargo (estimativa; não é pagamento recebido)',budget:referenceBudget,unitType:'reference',rows:validRows.filter(r=>r.basisId==='reference'),notice:referenceComponents.map(c=>c.notice).filter(Boolean).join(' ')||'Referência legal estimada para o período. Não representa remuneração efetivamente recebida nem inclui benefícios sem valor confirmado.'},
+    {id:'reference',label:'Somente salário-base (tabela)',budget:referenceBudget,unitType:'reference',rows:validRows.filter(r=>r.basisId==='reference'),notice:referenceComponents.map(c=>c.notice).filter(Boolean).join(' ')||'Referência legal estimada para o período. Não representa remuneração efetivamente recebida nem inclui benefícios sem valor confirmado.'},
     {id:'administration',label:'Subtotal dos contratos da amostra (não representa pagamentos nem gasto pessoal)',budget:contractRows.length?sum(contractRows):null,unitType:'contracts',rows:contractRows,notice:'Amostra de valores contratados conhecidos; não é total anual, pagamento ou custo pessoal.'},
   ]
-  const hasPublishedSalary=personalComponents.some(c=>c.kind==='remuneration')
-  const defaultSimulationBasis=hasPublishedSalary?'personalPublished':finite(referenceBudget)?'reference':administration?'administration':'personalPublished'
+  const defaultSimulationBasis=finite(combinedBudget)?'combined':administration?'administration':'personalPublished'
   const result=summarizeExpenses(simulationRows,{
-    data:rows,total:simulationBudget,components,simulationBudget,simulationLabel,unitType,coverageNotice,baseCoverageNotice:coverageNotice,
-    complete:!administration && office?.status==='available',personalPublishedComplete:!administration && office?.status==='available',sourceMode:'official',
+    verifiedMonths:costs.verifiedMonths,sourceIssues:[...new Set([costs.notice,...components.filter(c=>c.status==='unavailable').map(c=>c.notice)].filter(Boolean))],data:rows,total:simulationBudget,components,simulationBudget,simulationLabel,unitType,coverageNotice,baseCoverageNotice:coverageNotice,
+    complete:!administration && office?.status==='available',personalPublishedComplete:costs.verifiedMonths?.length===12||(!administration && office?.status==='available'),sourceMode:'official',
     sourceUrl:costs.sourceUrl || profile.officialUrl, sources:costs.sources || [],
     fetchedAt:costs.fetchedAt || new Date().toISOString(),notice:coverageNotice,year:Number(year),simulationBases,defaultSimulationBasis,
   })
@@ -121,26 +129,55 @@ export function adaptExpandedCosts(profile,costs,year) {
 }
 
 export async function getUnifiedExpenses(profile,year,options={}) {
-  let references=null, published=null, publishedError='',referenceError='',active=true
+  let references=null, published=null, publishedError='',referenceError='',active=true,publishedSettled=false
   const deputy=!profile.role||profile.role==='deputy'
   const combine=()=>{
     const personal=deputy&&published?{
       ...published,components:[{kind:'office',label:'Despesas CEAP publicadas',value:published.total,status:published.complete?'available':'partial',rows:published.data||[],notice:published.notice,sourceUrl:published.sourceUrl}],
     }:published||{}
     const components=[...(personal.components||[]).filter(c=>!c.kind?.startsWith('reference:')&&c.status!=='reference'),...(references?.components||[])]
-    return adaptExpandedCosts({...profile,role:profile.role||'deputy'},{...personal,components,notice:[personal.notice,references?.notice,publishedError,referenceError].filter(Boolean).join(' ')},year)
+    return {...adaptExpandedCosts({...profile,role:profile.role||'deputy'},{...personal,components,notice:[personal.notice,references?.notice,publishedError,referenceError].filter(Boolean).join(' ')},year),publishedPending:!publishedSettled}
   }
   const emit=()=>{if(active&&!options.signal?.aborted)options.onProgress?.(combine())}
   const referencePromise=getRoleReferences(profile,year,{signal:options.signal}).then(result=>{references=result;emit()}).catch(error=>{referenceError=`Referências indisponíveis: ${error.message}`})
   const publishedPromise=(deputy
     ?getExpenses(profile.id,{year},{...options,onProgress:result=>{published=result;if(references)emit()}})
     :getExpandedCosts(profile,year,{signal:options.signal}))
-    .then(result=>{published=result;if(references)emit()})
-    .catch(error=>{publishedError=`Dados publicados indisponíveis: ${error.message}`;if(references)emit()})
+    .then(result=>{published=result;publishedSettled=true;if(references)emit()})
+    .catch(error=>{publishedSettled=true;publishedError=`Dados publicados indisponíveis: ${error.message}`;if(references)emit()})
   try {
     await Promise.all([referencePromise,publishedPromise])
     if(options.signal?.aborted)throw new DOMException('Consulta cancelada.','AbortError')
     if(!references&&!published)throw new Error([publishedError,referenceError].filter(Boolean).join(' ')||'Fontes indisponíveis.')
     return combine()
   }finally{active=false}
+}
+
+// Deputy years follow the imported expense files, never an invented mandate start.
+export function getAvailableYears(profile,available=null){
+ if(profile.costYears?.length)return profile.costYears
+ if(profile.role==='minister')return [2025]
+ if(profile.role==='president'&&!profile.historical)return [2025]
+ if(['justice','senator'].includes(profile.role))return [2025]
+ if(profile.role==='deputy'){
+   const imported=Object.keys(available||{'2025':[],'2026':[]}).map(Number).filter(Number.isInteger).sort((a,b)=>b-a)
+   const withRecords=imported.filter(year=>available?.[year]?.map(String).includes(String(profile.id)))
+   if(withRecords.length)return withRecords
+   return imported.length?imported:[2025]
+ }
+ const start=Number(profile.termStart?.slice(0,4))||2019
+ const end=Math.min(2026,Number(profile.termEnd?.slice(0,4))||2026)
+ return Array.from({length:Math.max(1,end-start+1)},(_,i)=>end-i)
+}
+
+export function getCoverageStatus(expenses){
+ if(expenses.publishedPending)return {kind:'loading',message:'Consultando os gastos individuais. O salário da tabela pode aparecer primeiro.'}
+ const components=expenses.components||[]
+ const table=components.some(c=>(c.status==='reference'||c.kind?.startsWith('reference:'))&&finite(c.value))
+ const published=components.some(c=>c.status!=='reference'&&!c.kind?.startsWith('reference:')&&c.kind!=='administration'&&finite(c.value))
+ const contracts=components.some(c=>c.kind==='administration'&&c.rows?.some(r=>finite(r.value)||finite(r.netValue)))
+ if(!table&&!published&&!contracts)return {kind:'unavailable',message:'Ainda não temos valores para este perfil neste ano. Isso não significa gasto zero.'}
+ if(table&&!published)return {kind:'table-only',message:'Só o salário da tabela está disponível. Ainda não temos gastos individuais para este perfil e ano.'}
+ if(!table&&!published&&contracts)return {kind:'contracts-only',message:'Só há contratos da gestão nesta consulta; os gastos individuais ainda não estão disponíveis.'}
+ return {kind:'published',message:''}
 }

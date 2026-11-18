@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node --test scripts/*.test.mjs",
     "dev": "vite --host 0.0.0.0",
-    "build": "vite build && node scripts/build-worker.mjs",
+    "build:ranking": "node scripts/build-ranking.mjs",
+    "build": "node scripts/build-ranking.mjs && vite build && node scripts/build-worker.mjs",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

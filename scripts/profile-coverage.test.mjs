@@ -44,3 +44,19 @@ test('Lula, Jair, Moraes and Flávio have canonical offline references and local
     assert.equal(externalCalls,0)
   }finally{globalThis.fetch=original}
 })
+
+ test('all governor portraits are local and mayor photos use their exact TSE identity',async()=>{
+ const {NAMED_DIRECTORY}=await import('../worker/political-profiles.js')
+ const governors=NAMED_DIRECTORY.profiles.filter(p=>p.role==='governor')
+ assert.equal(governors.length,27)
+ for(const p of governors){
+   assert.ok(p.photo.startsWith('/portraits/'))
+   assert.ok(statSync(new URL('../public'+p.photo,import.meta.url)).size>1000)
+ }
+ const mayors=NAMED_DIRECTORY.profiles.filter(p=>p.role==='mayor')
+ assert.ok(mayors.length>5500)
+ for(const p of mayors){
+   const seq=p.id.split('-').at(-1)
+   assert.equal(p.photo,`https://resultados.tse.jus.br/oficial/ele2024/619/fotos/${p.state.toLowerCase()}/${seq}.jpeg`)
+ }
+ })
