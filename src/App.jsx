@@ -50,7 +50,7 @@ export default function App() {
   },[tab])
   useEffect(()=>{
     if(reducedMotion)return
-    const timer=setInterval(()=>setHeroRoleIndex(index=>index+1),5000)
+    const timer=setInterval(()=>setHeroRoleIndex(index=>index+1),3000)
     return()=>clearInterval(timer)
   },[reducedMotion])
   useEffect(()=>{
@@ -177,14 +177,14 @@ function RotatingReceipt(){
      let data=cache.current.get(politician.id)
      if(!data){const [expenses,audit]=await Promise.all([getExpenses(politician.id,{year:RECEIPT_YEAR},{signal:controller.signal}),getMandateCosts(politician.id,RECEIPT_YEAR,{signal:controller.signal}).catch(()=>null)]);data={...expenses,audit,total:auditedTotal(expenses,audit)};cache.current.set(politician.id,data)}
      if(active){previous.current=politician.id;setReceipt({politician,...data});setStatus('')}
-    }catch(e){if(active)setStatus(`Consulta indisponível: ${e.message} Nova tentativa em 30 s.`)}
-    if(active&&!paused)timer=setTimeout(cycle,30000)
+    }catch(e){if(active)setStatus(`Consulta indisponível: ${e.message} Nova tentativa em 6 s.`)}
+    if(active&&!paused)timer=setTimeout(cycle,6000)
    }
    if(!paused||!receipt)cycle()
    return()=>{active=false;controller.abort();clearTimeout(timer)}
  },[paused])
  const top=receipt?[...receipt.data].filter(x=>x.netValue>0).sort((a,b)=>b.netValue-a.netValue).slice(0,3):[]
- return <aside className="hero-receipt" aria-label="Recibo de despesas de um deputado aleatório"><div className="receipt-head"><span>DESPESAS DECLARADAS</span><span>{RECEIPT_YEAR}</span></div><div className="receipt-content" key={receipt?.politician.id||'loading'}><div className="receipt-person">{receipt?.politician.photo&&<img src={receipt.politician.photo} alt="" width="48" height="48"/>}<div><strong>{receipt?.politician.name||'Consultando deputado'}</strong><small>{receipt?`${receipt.politician.party} · ${receipt.politician.state}`:'Dados Abertos da Câmara'}</small></div></div><span className="receipt-caption">Maiores despesas da CEAP</span>{top.map(x=><p key={x.id} className="receipt-expense"><span>{x.category}<small>{x.supplier}</small></span><strong>{formatCurrency(x.netValue)}</strong></p>)}{receipt&&!top.length&&<p>Nenhuma despesa registrada no período.</p>}{status&&<p role="status">{status}</p>}<div className="receipt-total"><span>TOTAL DISPONÍVEL</span><strong>{receipt?formatCurrency(receipt.total):'—'}</strong></div><small>{receipt?`${receipt.data.length} lançamentos CEAP${receipt.audit?' · inclui folha e gabinete disponíveis':' · somente CEAP'}`:'Consultando o total…'}</small></div><div className="receipt-controls"><span>Troca a cada 30 s</span><button type="button" onClick={()=>setPaused(p=>!p)}>{paused?'Continuar':'Pausar'}</button></div>{receipt?.sourceUrl&&<a className="official-link" href={receipt.sourceUrl} target="_blank" rel="noreferrer">Conferir na fonte <ExternalLink/></a>}</aside>
+ return <aside className="hero-receipt" aria-label="Recibo de despesas de um deputado aleatório"><div className="receipt-head"><span>DESPESAS DECLARADAS</span><span>{RECEIPT_YEAR}</span></div><div className="receipt-content" key={receipt?.politician.id||'loading'}><div className="receipt-person">{receipt?.politician.photo&&<img src={receipt.politician.photo} alt="" width="48" height="48"/>}<div><strong>{receipt?.politician.name||'Consultando deputado'}</strong><small>{receipt?`${receipt.politician.party} · ${receipt.politician.state}`:'Dados Abertos da Câmara'}</small></div></div><span className="receipt-caption">Maiores despesas da CEAP</span>{top.map(x=><p key={x.id} className="receipt-expense"><span>{x.category}<small>{x.supplier}</small></span><strong>{formatCurrency(x.netValue)}</strong></p>)}{receipt&&!top.length&&<p>Nenhuma despesa registrada no período.</p>}{status&&<p role="status">{status}</p>}<div className="receipt-total"><span>TOTAL DISPONÍVEL</span><strong>{receipt?formatCurrency(receipt.total):'—'}</strong></div><small>{receipt?`${receipt.data.length} lançamentos CEAP${receipt.audit?' · inclui folha e gabinete disponíveis':' · somente CEAP'}`:'Consultando o total…'}</small></div><div className="receipt-controls"><span>Troca a cada 6 s</span><button type="button" onClick={()=>setPaused(p=>!p)}>{paused?'Continuar':'Pausar'}</button></div>{receipt?.sourceUrl&&<a className="official-link" href={receipt.sourceUrl} target="_blank" rel="noreferrer">Conferir na fonte <ExternalLink/></a>}</aside>
 }
 
 function SourcesButton({expenses,profile,audit,auditError}){
