@@ -1,0 +1,66 @@
+{
+  "cafe-pao": {
+    "source": "Unsplash",
+    "image": "https://images.unsplash.com/photo-1570968915860-54d5c301fa9f?auto=format&fit=crop&w=640&h=400&q=85"
+  },
+  "prato-feito": {
+    "source": "Unsplash",
+    "image": "https://images.unsplash.com/photo-1512058564366-18510be2db19?auto=format&fit=crop&w=640&h=400&q=85"
+  },
+  "cesta-basica": {
+    "source": "Unsplash",
+    "image": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=640&h=400&q=85"
+  },
+  "celular": {
+    "source": "Unsplash",
+    "image": "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=640&h=400&q=85"
+  },
+  "notebook": {
+    "source": "Imagem oficial do fabricante / marca",
+    "image": "https://www.apple.com/v/macbook-air/z/images/meta/macbook_air_mx__ez5y0k5yy7au_og.png?202607311124"
+  },
+  "aluguel": {
+    "source": "Unsplash",
+    "image": "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=640&h=400&q=85"
+  },
+  "salario-minimo": {
+    "source": "Unsplash",
+    "image": "https://images.unsplash.com/photo-1450101499163-c8848c66ca85?auto=format&fit=crop&w=640&h=400&q=85"
+  },
+  "moto": {
+    "source": "Honda Financiamento",
+    "image": "https://www.hondafinanciamento.com/media/models/CG160_Fan.webp"
+  },
+  "carro": {
+    "source": "Divulgação Fiat / Stellantis",
+    "image": "https://www.media.stellantis.com/cache/3/e/4/8/2/3e48219017e9b096617d9e9f264691df3a6334c4.jpeg"
+  },
+  "apartamento": {
+    "source": "Unsplash",
+    "image": "https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=640&h=400&q=85"
+  },
+  "rtx-5090": {
+    "source": "Imagem oficial do fabricante / marca",
+    "image": "https://www.nvidia.com/content/dam/en-zz/Solutions/geforce/graphic-cards/50-series/rtx-5090/geforce-rtx-5090-learn-more-og-1200x630.jpg"
+  },
+  "ps5": {
+    "source": "Imagem oficial do fabricante / marca",
+    "image": "https://gmedia.playstation.com/is/image/SIEPDC/ps5-product-thumbnail-01-en-14sep21?$facebook$"
+  },
+  "gta-6": {
+    "source": "Imagem oficial do fabricante / marca",
+    "image": "https://www.rockstargames.com/VI/_next/static/media/meta.0t8ty~nlmxq2s.jpg?K1OF2OByoQie0QQKb3wpE"
+  },
+  "spotify": {
+    "source": "Imagem oficial do fabricante / marca",
+    "image": "https://www.scdn.co/i/_global/open-graph-default.png"
+  },
+  "combo-mc": {
+    "source": "Imagem oficial do fabricante / marca",
+    "image": "https://api-middleware-mcd.mcdonaldscupones.com/media/image/product$Brabo Smokehouse_300x225px.png/200/200/original?country=br"
+  },
+  "viagem-japao": {
+    "source": "Unsplash",
+    "image": "https://images.unsplash.com/photo-1540959733332-eab4deabeeaf?auto=format&fit=crop&w=640&h=400&q=85"
+  }
+}

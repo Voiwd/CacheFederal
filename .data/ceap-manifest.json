@@ -1,0 +1,17 @@
+{
+  "fetchedAt": "2026-11-17T03:19:37.878626+00:00",
+  "years": {
+    "2025": {
+      "sourceUrl": "https://www.camara.leg.br/cotas/Ano-2025.csv.zip",
+      "sha256": "8256486e331bd10947476e34670746c8d01fd186cde9f0ea2ca6d17d6fbf0b9d",
+      "deputies": 562,
+      "rows": 208151
+    },
+    "2026": {
+      "sourceUrl": "https://www.camara.leg.br/cotas/Ano-2026.csv.zip",
+      "sha256": "04962a2884a063e953fcbeaa3f109dd4efd6a009579eaccc35dab09974255ff0",
+      "deputies": 565,
+      "rows": 124942
+    }
+  }
+}

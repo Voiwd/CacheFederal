@@ -1,0 +1,58 @@
+{
+  "collectedAt": "2026-11-17",
+  "notes": "Official portraits resized only; source URLs and credits retained per profile. Jair Bolsonaro portrait is his historical Câmara portrait, not current office.",
+  "photos": {
+    "lula": [
+      "/portraits/lula.jpg",
+      "https://live.staticflickr.com/65535/52715235994_de0c47a2d9_b.jpg"
+    ],
+    "jair-bolsonaro": [
+      "/portraits/jair-bolsonaro.jpg",
+      "https://www.camara.leg.br/internet/deputado/bandep/74847.jpg"
+    ],
+    "flavio-bolsonaro": [
+      "/portraits/flavio-bolsonaro.jpg",
+      "https://www.senado.leg.br/senadores/img/fotos-oficiais/senador5894.jpg"
+    ],
+    "edson-fachin": [
+      "/portraits/edson-fachin.jpg",
+      "https://portal.stf.jus.br/assets/img/edson-fachin.jpg"
+    ],
+    "gilmar-mendes": [
+      "/portraits/gilmar-mendes.jpg",
+      "https://portal.stf.jus.br/assets/img/gilmar-mendes.jpg"
+    ],
+    "carmen-lucia": [
+      "/portraits/carmen-lucia.jpg",
+      "https://portal.stf.jus.br/assets/img/carmen-lucia.jpg"
+    ],
+    "dias-toffoli": [
+      "/portraits/dias-toffoli.jpg",
+      "https://portal.stf.jus.br/assets/img/dias-toffoli.jpg"
+    ],
+    "luiz-fux": [
+      "/portraits/luiz-fux.jpg",
+      "https://portal.stf.jus.br/assets/img/luiz-fux.jpg"
+    ],
+    "alexandre-de-moraes": [
+      "/portraits/alexandre-de-moraes.jpg",
+      "https://portal.stf.jus.br/assets/img/alexandre-de-moraes.jpg"
+    ],
+    "nunes-marques": [
+      "/portraits/nunes-marques.jpg",
+      "https://portal.stf.jus.br/assets/img/nunes-marques.jpg"
+    ],
+    "andre-mendonca": [
+      "/portraits/andre-mendonca.jpg",
+      "https://portal.stf.jus.br/assets/img/andre-mendonca.png"
+    ],
+    "cristiano-zanin": [
+      "/portraits/cristiano-zanin.jpg",
+      "https://portal.stf.jus.br/assets/img/cristiano-zanin.jpg"
+    ],
+    "flavio-dino": [
+      "/portraits/flavio-dino.jpg",
+      "https://portal.stf.jus.br/assets/img/flavio-dino.png"
+    ]
+  }
+}
