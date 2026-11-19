@@ -40,7 +40,7 @@ test('Lula, Jair, Moraes and Flávio have canonical offline references and local
     const outside=await expansionResponse(request(profiles.jair,2025))
     assert.equal((await outside.json()).referenceTotal,null)
     const justices=await searchExpansion(new URLSearchParams({role:'justice'}))
-    assert.equal(justices.data.length,10)
+    assert.equal(justices.data.length,8)
     assert.equal(externalCalls,0)
   }finally{globalThis.fetch=original}
 })

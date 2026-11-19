@@ -129,17 +129,17 @@ export function adaptExpandedCosts(profile,costs,year) {
 }
 
 export async function getUnifiedExpenses(profile,year,options={}) {
-  let references=null, published=null, publishedError='',referenceError='',active=true,publishedSettled=false
+  let references=null, published=null, publishedError='',referenceError='',active=true,publishedSettled=false,referencesSettled=false
   const deputy=!profile.role||profile.role==='deputy'
   const combine=()=>{
     const personal=deputy&&published?{
       ...published,components:[{kind:'office',label:'Despesas CEAP publicadas',value:published.total,status:published.complete?'available':'partial',rows:published.data||[],notice:published.notice,sourceUrl:published.sourceUrl}],
     }:published||{}
     const components=[...(personal.components||[]).filter(c=>!c.kind?.startsWith('reference:')&&c.status!=='reference'),...(references?.components||[])]
-    return {...adaptExpandedCosts({...profile,role:profile.role||'deputy'},{...personal,components,notice:[personal.notice,references?.notice,publishedError,referenceError].filter(Boolean).join(' ')},year),publishedPending:!publishedSettled}
+    return {...adaptExpandedCosts({...profile,role:profile.role||'deputy'},{...personal,components,notice:[personal.notice,references?.notice,publishedError,referenceError].filter(Boolean).join(' ')},year),publishedPending:!publishedSettled,referencesPending:!referencesSettled}
   }
   const emit=()=>{if(active&&!options.signal?.aborted)options.onProgress?.(combine())}
-  const referencePromise=getRoleReferences(profile,year,{signal:options.signal}).then(result=>{references=result;emit()}).catch(error=>{referenceError=`Referências indisponíveis: ${error.message}`})
+  const referencePromise=getRoleReferences(profile,year,{signal:options.signal}).then(result=>{references=result}).catch(error=>{referenceError=`Referências indisponíveis: ${error.message}`}).finally(()=>{referencesSettled=true;emit()})
   const publishedPromise=(deputy
     ?getExpenses(profile.id,{year},{...options,onProgress:result=>{published=result;if(references)emit()}})
     :getExpandedCosts(profile,year,{signal:options.signal}))

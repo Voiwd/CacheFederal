@@ -4,6 +4,8 @@ import {FEDERAL_COSTS} from '../worker/federal-costs.js'
 import {expansionCosts,expansionResponse,searchExpansion} from '../worker/expansion.js'
 import {getRoleReferenceCosts} from '../worker/reference-costs.js'
 import {adaptExpandedCosts,getAvailableYears} from '../src/lib/unified.js'
+import {NAMED_DIRECTORY} from '../worker/political-profiles.js'
+import {ADDITIONAL_PROFILES} from '../worker/additional-profiles.js'
 
 test('federal published payroll replaces the table and reconciles annual totals',async()=>{
  const profile=(await searchExpansion(new URLSearchParams({role:'president',name:'Lula'}))).data.find(p=>p.id==='tse-2022-280001607829')
@@ -29,7 +31,8 @@ test('all federal components reconcile in cents and never contain personal tax i
 })
 
 test('current minister names cannot receive an annual salary for a different historical job',async()=>{
- const profile=(await searchExpansion(new URLSearchParams({role:'minister',name:'Miriam'}))).data[0]
+ assert.equal((await searchExpansion(new URLSearchParams({role:'minister',name:'Miriam'}))).data.length,0)
+ const profile=NAMED_DIRECTORY.profiles.find(p=>p.role==='minister'&&p.name.includes('Miriam'))
  for(const route of ['references','costs']){
   const params=new URLSearchParams({year:'2025',profile:JSON.stringify(profile)})
   const response=await expansionResponse(new Request(`https://local/api/expansion/${route}?${params}`))
@@ -56,7 +59,7 @@ test('Bolsonaro uses the verified 2022 payroll and missing travel does not becom
 })
 
 test('source failures remain explicit without partial historical payroll',async()=>{
- const profile=(await searchExpansion(new URLSearchParams({role:'president',name:'Temer'}))).data[0]
+ const profile=ADDITIONAL_PROFILES.find(p=>p.id==='president-historical-michel-temer')
  FEDERAL_COSTS.sourceFailures ||= {}
  const previous=FEDERAL_COSTS.sourceFailures[2017]
  FEDERAL_COSTS.sourceFailures[2017]={notice:'Download exige verificação humana; ano não importado.',sourceUrl:'https://portaldatransparencia.gov.br/download-de-dados/servidores'}
@@ -69,8 +72,10 @@ test('source failures remain explicit without partial historical payroll',async(
 
 test('historical presidents retain their own closed year and published salary-cap deductions',async()=>{
  for(const [name,year,expected] of [['Temer',2018,42521.76],['Dilma',2015,417618.45]]){
-  const profile=(await searchExpansion(new URLSearchParams({role:'president',name}))).data[0]
-  assert.deepEqual(getAvailableYears(profile),[year])
+  const matches=(await searchExpansion(new URLSearchParams({role:'president',name}))).data
+  if(name==='Temer')assert.equal(matches.length,0)
+  else assert.deepEqual(getAvailableYears(matches[0]),[year])
+  const profile=ADDITIONAL_PROFILES.find(p=>p.role==='president'&&p.name.includes(name))
   const paid=await expansionCosts(profile,year)
   assert.equal(paid.verifiedMonths.length,12)
   assert.equal(paid.components.find(c=>c.kind==='remuneration').value,expected)

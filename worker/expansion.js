@@ -3,6 +3,7 @@ import {FEDERAL_COSTS} from './federal-costs.js'
 import {ADDITIONAL_PROFILES,PROFILE_ENRICHMENTS} from './additional-profiles.js'
 import {PARLIAMENT_DIRECTORY} from './parliament-directory.js'
 import {getRoleReferenceCosts} from './reference-costs.js'
+import {hasSearchableCosts} from './search-coverage.js'
 import {NAMED_DIRECTORY} from './political-profiles.js'
 // Official sources only. Missing personal data is never represented as zero.
 const expansionCache = new Map()
@@ -13,7 +14,9 @@ const PNCP = 'https://pncp.gov.br/api/consulta/v1/contratos'
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 const enrichProfile = profile => {
   const extra=PROFILE_ENRICHMENTS[profile.id] || PROFILE_ENRICHMENTS[profile.name] || PROFILE_ENRICHMENTS[fold(profile.name)] || {}
-  const costYears=['president','minister'].includes(profile.role)?Object.entries(FEDERAL_COSTS.years).filter(([,data])=>data.profiles[profile.id]).map(([year])=>Number(year)).sort((a,b)=>b-a):undefined
+  const costYears=['president','minister'].includes(profile.role)
+    ? Object.entries(FEDERAL_COSTS.years).filter(([year,data])=>hasSearchableCosts(data.profiles[profile.id],getRoleReferenceCosts(profile,Number(year)).referenceTotal)).map(([year])=>Number(year)).sort((a,b)=>b-a)
+    : profile.role==='justice' && hasSearchableCosts(STF_PAYROLL.profiles[profile.id],getRoleReferenceCosts(profile,STF_PAYROLL.year).referenceTotal)?[STF_PAYROLL.year]:profile.role==='justice'?[]:undefined
   return {...profile,...extra,...(costYears?{costYears}: {})}
 }
 const namedProfiles=()=>[...NAMED_DIRECTORY.profiles,...ADDITIONAL_PROFILES].map(enrichProfile)
@@ -47,8 +50,8 @@ export async function searchExpansion(params) {
   if (['governor','mayor','president','minister','justice'].includes(role)) {
     const party=fold(params.get('party'))
     const cityFilter=fold(params.get('city'))
-    const matches=namedProfiles().filter(p=>p.role===role&&(!state||p.state===state)&&(!party||fold(p.party)===party)&&(!name||[p.name,p.fullName,p.institutionalName,...(p.aliases||[])].some(v=>fold(v).includes(name)))&&(!cityFilter||fold(p.city).includes(cityFilter)))
-    return {data:matches.slice(0,100),total:matches.length,generatedAt:NAMED_DIRECTORY.generatedAt,notice:role==='minister'?'Nomes do diretório oficial do Planalto, com data de consulta no perfil. Histórico de titulares e remuneração não integrado.':'Nomes eleitos nas eleições ordinárias: governadores/presidente 2022 e prefeitos 2024. Registros eleitorais históricos não confirmam ocupação atual. Até 100 resultados; refine nome, partido ou UF.'}
+    const matches=namedProfiles().filter(p=>p.role===role&&p.costYears?.length&&(!state||p.state===state)&&(!party||fold(p.party)===party)&&(!name||[p.name,p.fullName,p.institutionalName,...(p.aliases||[])].some(v=>fold(v).includes(name)))&&(!cityFilter||fold(p.city).includes(cityFilter)))
+    return {data:matches.slice(0,100),total:matches.length,generatedAt:NAMED_DIRECTORY.generatedAt,notice:'Somente perfis com valores pessoais publicados iguais ou superiores ao salário-base de referência do cargo no ano consultado. Perfis sem dados ou abaixo desse mínimo ficam fora da busca. Até 100 resultados; refine nome, partido ou UF.'}
   }
   if (role === 'senator' || role === 'deputy') {
     const profiles=role==='senator'?PARLIAMENT_DIRECTORY.senators:PARLIAMENT_DIRECTORY.deputies

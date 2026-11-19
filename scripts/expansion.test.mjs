@@ -4,7 +4,7 @@ import {normalizeCeaps, expansionCosts, expansionResponse,searchExpansion,reconc
 import {NAMED_DIRECTORY} from '../worker/political-profiles.js'
 
 test('nominal official directory finds each executive office and retains temporal provenance',async()=>{
-  for(const [role,name] of [['president','Lula'],['minister','Miriam']]) {
+  for(const [role,name] of [['president','Lula'],['minister','Luiz Marinho']]) {
     const result=await searchExpansion(new URLSearchParams({role,name}))
     assert.ok(result.data.length,`${role}: ${name}`)
     assert.ok(result.data.every(p=>p.role===role&&p.sourceMode==='official'&&p.sourceNotice&&p.sourceDate&&p.officialUrl.startsWith('https://')))
