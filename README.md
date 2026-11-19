@@ -1,6 +1,54 @@
 # Cachê Federal
 
-Consulta de dados públicos sobre representantes, membros do STF e despesas do exercício do cargo. A interface distingue remuneração da pessoa, referências legais do cargo, despesas vinculadas ao cargo e gastos da gestão. Um orçamento público não representa o patrimônio ou o custo pessoal do governante.
+<p align="center">
+  <img src="public/icon-brasil.png" alt="Ícone do Cachê Federal" width="112" />
+</p>
+
+<p align="center">
+  <strong>Descubra quanto custa o exercício de cargos públicos — com dados e fontes à vista.</strong><br />
+  Consulte despesas parlamentares e informações de representantes, do Executivo federal e do STF.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="Licença MIT" src="https://img.shields.io/badge/licen%C3%A7a-MIT-145a42.svg"></a>
+  <a href="https://github.com/Voiwd/CacheFederal"><img alt="Estrelas no GitHub" src="https://img.shields.io/github/stars/Voiwd/CacheFederal?style=social"></a>
+  <img alt="Idioma português do Brasil" src="https://img.shields.io/badge/idioma-pt--BR-009739.svg">
+  <img alt="React" src="https://img.shields.io/badge/React-UI-149eca.svg?logo=react&logoColor=white">
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-build-646cff.svg?logo=vite&logoColor=white">
+  <img alt="Dados públicos" src="https://img.shields.io/badge/dados-p%C3%BAblicos-ffdf00.svg?labelColor=145a42">
+</p>
+
+[**🌐 Abrir o Cachê Federal**](https://cache-federal.voiwd.chatgpt.site)
+
+## Veja como funciona
+
+![Captura da página inicial do Cachê Federal](docs/screenshot-home.png)
+
+### O que você pode fazer
+
+- **Encontrar uma figura pública** por nome e explorar os perfis disponíveis.
+- **Consultar valores por período**, com salário de referência, remunerações e despesas publicadas apresentados em categorias distintas.
+- **Conferir de onde vêm os números** e quais dados estão disponíveis em cada perfil.
+- **Comparar valores** com itens e despesas do dia a dia usando o simulador ilustrativo.
+- **Explorar o ranking** e abrir um perfil para ver sua composição e fontes.
+
+O site reúne informações públicas da Câmara, do Senado, do Executivo federal e do STF. A cobertura muda conforme a pessoa, o cargo e o ano consultado. Os valores são retratos das fontes disponíveis: remuneração de referência não é contracheque, e gastos da gestão não são despesas pessoais.
+
+## Executar localmente
+
+Requer Node.js 22 ou posterior. Na raiz do projeto, instale as dependências e inicie o servidor:
+
+```sh
+npm ci
+npm run dev
+```
+
+As consultas financeiras precisam do servidor do projeto; servir somente os arquivos estáticos não habilita essas consultas. Veja as notas técnicas e fontes na documentação abaixo.
+
+---
+
+<details>
+<summary>Documentação técnica, fontes e metodologia</summary>
 
 ## Desenvolvimento
 
@@ -102,3 +150,5 @@ Testes: `python scripts/test_federal_costs.py` e `npm test`.
 Cobertura federal importada nesta versão: Lula/2025, Bolsonaro/2022, Temer/2018 e Dilma/2015, além de 13 ministros com exercício anual confirmado em 2025. Os arquivos históricos que bloquearam a coleta automática foram obtidos pelo formulário oficial no navegador e depois conciliados com os demais meses. Nenhum subtotal anual foi publicado. Anos anteriores a essa cobertura não recebem valores copiados de outros exercícios. Nos três ex-presidentes, não houve viagens individuais identificadas no SCDP; a ausência fica explícita, sem criar uma despesa de valor zero. O total de Temer respeita o abate-teto publicado na folha; aposentadorias e outros vínculos não são somados ao cargo presidencial.
 
 O importador reutiliza os arquivos locais para permitir retomada. Use `--refresh` para baixar novamente fontes que possam ter recebido ajustes; mudanças no conjunto de nomes invalidam o cache de seleção. Sem os 12 meses ou com falha de leitura, o ano publicado anteriormente é preservado.
+
+</details>
